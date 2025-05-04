@@ -45,7 +45,7 @@ async function getNextFileNumber() {
     }
 }
 
-router.post('/upload-project', upload.single('project'), async (req, res) => {
+router.post('/', upload.single('project'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
