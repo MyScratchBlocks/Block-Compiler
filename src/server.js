@@ -1,8 +1,8 @@
 const express = require('express');
 const path = require('path');
 const dotenv = require('dotenv');
-const loadRoute = require('./src/load');
-const uploadRoute = require('./src/upload');
+const loadRoute = require('./load');
+const uploadRoute = require('./upload');
 
 dotenv.config();
 
