@@ -1,8 +1,9 @@
 const express = require('express');
 const axios = require('axios');
+const { users } = require('./upload');
 
 const router = express.Router();
-
+ 
 const GITHUB_REPO = 'Editor-Compiler';
 const GITHUB_OWNER = 'CodeSnap-ORG';
 const GITHUB_UPLOAD_PATH = 'uploads';
@@ -43,4 +44,6 @@ router.get('/projects/:id', async (req, res) => {
     }
 });
 
+router.get('/projects/:id/user', (req, res) => {
+    res.send(users[id]) 
 module.exports = router;
