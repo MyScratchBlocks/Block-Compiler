@@ -4,6 +4,7 @@ const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
 
+let users = [] 
 const router = express.Router();
 const upload = multer({ dest: 'temp_uploads/' });
 
@@ -46,10 +47,11 @@ async function getNextFileNumber() {
 }
 
 router.post('/', upload.single('project'), async (req, res) => {
+    const { username } = req.body.username;
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
-
+    users.append(
     const filePath = req.file.path;
 
     try {
