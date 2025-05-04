@@ -45,5 +45,14 @@ router.get('/projects/:id', async (req, res) => {
 });
 
 router.get('/projects/:id/user', (req, res) => {
-    res.send(users[id]) 
+    const { id } = req.params;
+    const projectData = users[id];
+
+    if (projectData) {
+        res.json(projectData);
+    } else {
+        res.status(404).json({ error: `No data found for project ${id}` });
+    }
+});
+
 module.exports = router;
