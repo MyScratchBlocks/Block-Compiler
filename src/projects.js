@@ -8,7 +8,7 @@ router.get('/api/projects', (req, res) => {
   res.json({ projects });
 });
 
-// PUT /api/projects
+// POST /api/projects
 router.post('/api/projects', (req, res) => {
   const { name, thumbnail, genre, link } = req.body;
 
