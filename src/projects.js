@@ -9,7 +9,7 @@ router.get('/api/projects', (req, res) => {
 });
 
 // PUT /api/projects
-router.put('/api/projects', (req, res) => {
+router.post('/api/projects', (req, res) => {
   const { name, thumbnail, genre, link } = req.body;
 
   const project = {
