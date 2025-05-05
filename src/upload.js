@@ -47,11 +47,11 @@ async function getNextFileNumber() {
 }
 
 router.post('/', upload.single('project'), async (req, res) => {
-    const { username } = req.body.username;
+    const username = req.body.username;
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
-    users.append(
+
     const filePath = req.file.path;
 
     try {
