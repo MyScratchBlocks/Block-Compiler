@@ -10,7 +10,7 @@ router.get('/api/projects', async (req, res) => {
   try {
     const response = await axios.get(GITHUB_API_URL, {
       headers: { 
-        'User-Agent': 'CodeSnap-Agent' 
+        'User-Agent': 'CodeSnap-Agent', // Added the missing comma here
         'Authorization': `token ${process.env.GITHUB_TOKEN}`
       }
     });
