@@ -55,4 +55,16 @@ router.get('/projects/:id/user', (req, res) => {
     }
 });
 
+function generate24CharCode() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let code = '';
+  for (let i = 0; i < 24; i++) {
+    const randomIndex = Math.floor(Math.random() * chars.length);
+    code += chars[randomIndex];
+  }
+  return code;
+}
+
+router.get('/api/projects/:id', (req, res) => {
+ 
 module.exports = router;
