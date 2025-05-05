@@ -28,7 +28,10 @@ router.get('/:id', async (req, res) => {
         const projectJson = projectJsonEntry.getData().toString('utf8');
         const projectData = JSON.parse(projectJson);
 
-        res.json(projectData);
+        res.setHeader('Content-Disposition', 'attachment; filename=project.json');
+        res.setHeader('Content-Type', 'application/json');
+        res.send(projectJson);
+        
     } catch (err) {
         console.error('Error processing SB3 file:', err);
         res.status(500).send('Failed to fetch or process SB3 file');
