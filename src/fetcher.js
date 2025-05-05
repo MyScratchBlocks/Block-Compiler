@@ -11,27 +11,35 @@ router.get('/:id', async (req, res) => {
     const fileUrl = `${GITHUB_RAW_BASE}/${fileId}.sb3`;
 
     try {
+        console.log(`Fetching SB3 file from URL: ${fileUrl}`);
         const response = await fetch(fileUrl);
 
         if (!response.ok) {
+            console.error(`Failed to fetch file: ${response.statusText}`);
             return res.status(404).send('SB3 file not found on GitHub');
         }
 
+        console.log(`SB3 file fetched successfully: ${fileUrl}`);
         const buffer = await response.buffer();
+
+        console.log(`Buffer size: ${buffer.length} bytes`);
         const zip = new AdmZip(buffer);
         const projectJsonEntry = zip.getEntry('project.json');
 
         if (!projectJsonEntry) {
+            console.error('project.json not found inside the SB3 file');
             return res.status(400).send('project.json not found in SB3 file');
         }
 
-        const projectJson = projectJsonEntry.getData().toString('utf8');
-        const projectData = JSON.parse(projectJson);
+        console.log('project.json found, preparing to send as download');
+        const projectJsonBuffer = projectJsonEntry.getData();
 
-        res.setHeader('Content-Disposition', 'attachment; filename=project.json');
+        // Set headers for file download
+        res.setHeader('Content-Disposition', 'attachment; filename="project.json"');
         res.setHeader('Content-Type', 'application/json');
-        res.send(projectJson);
-        
+        res.setHeader('Content-Length', projectJsonBuffer.length);
+
+        res.send(projectJsonBuffer);
     } catch (err) {
         console.error('Error processing SB3 file:', err);
         res.status(500).send('Failed to fetch or process SB3 file');
