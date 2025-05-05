@@ -1,48 +1,68 @@
 const express = require('express');
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 const AdmZip = require('adm-zip');
-const fetch = require('node-fetch');
 
 const router = express.Router();
 
-const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/CodeSnap-ORG/Editor-Compiler/main/uploads';
+// Helper function to fetch and extract project.json from .sb3 file
+async function fetchAndParseSb3(url) {
+    try {
+        // Fetch the SB3 file using axios with responseType as 'arraybuffer'
+        const response = await axios.get(url, { responseType: 'arraybuffer' });
 
+        if (response.status === 200) {
+            // Write the file to disk temporarily
+            const tempFilePath = path.join(__dirname, '../temp.sb3');
+            fs.writeFileSync(tempFilePath, response.data);
+
+            // Extract the SB3 file (which is a zip archive)
+            const zip = new AdmZip(tempFilePath);
+            const zipEntries = zip.getEntries(); // Get all files inside the SB3
+
+            // Extract the JSON file inside the SB3 (usually the 'project.json' file)
+            let projectJson;
+            zipEntries.forEach(entry => {
+                if (entry.entryName === 'project.json') {
+                    projectJson = JSON.parse(entry.getData().toString('utf8'));
+                }
+            });
+
+            // Delete the temporary SB3 file after extraction
+            fs.unlinkSync(tempFilePath);
+
+            return projectJson;
+        } else {
+            throw new Error(`Failed to fetch SB3 file: ${response.statusText}`);
+        }
+    } catch (error) {
+        console.error('Error fetching or extracting SB3 file:', error);
+        throw error;
+    }
+}
+
+// Route to fetch and return project.json from a .sb3 file
 router.get('/:id', async (req, res) => {
-    const fileId = req.params.id;
-    const fileUrl = `${GITHUB_RAW_BASE}/${fileId}.sb3`;
+    const sb3Id = req.params.id; // Extract the 'id' from the URL
+    const sb3Url = `https://raw.githubusercontent.com/CodeSnap-ORG/Editor-Compiler/main/uploads/${sb3Id}.sb3`; // Dynamic URL
 
     try {
-        console.log(`Fetching SB3 file from URL: ${fileUrl}`);
-        const response = await fetch(fileUrl);
+        // Fetch and parse the SB3 file
+        const projectJson = await fetchAndParseSb3(sb3Url);
 
-        if (!response.ok) {
-            console.error(`Failed to fetch file: ${response.statusText}`);
-            return res.status(404).send('SB3 file not found on GitHub');
-        }
+        // Convert the JSON object into a buffer
+        const jsonBuffer = Buffer.from(JSON.stringify(projectJson, null, 2));
 
-        console.log(`SB3 file fetched successfully: ${fileUrl}`);
-        const buffer = await response.buffer();
-
-        console.log(`Buffer size: ${buffer.length} bytes`);
-        const zip = new AdmZip(buffer);
-        const projectJsonEntry = zip.getEntry('project.json');
-
-        if (!projectJsonEntry) {
-            console.error('project.json not found inside the SB3 file');
-            return res.status(400).send('project.json not found in SB3 file');
-        }
-
-        console.log('project.json found, preparing to send as download');
-        const projectJsonBuffer = projectJsonEntry.getData();
-
-        // Set headers for file download
-        res.setHeader('Content-Disposition', 'attachment; filename="project.json"');
+        // Set the response headers to force the browser to download the file
+        res.setHeader('Content-Disposition', `attachment; filename="${sb3Id}-project.json"`);
         res.setHeader('Content-Type', 'application/json');
-        res.setHeader('Content-Length', projectJsonBuffer.length);
 
-        res.send(projectJsonBuffer);
-    } catch (err) {
-        console.error('Error processing SB3 file:', err);
-        res.status(500).send('Failed to fetch or process SB3 file');
+        // Send the JSON file as a downloadable response
+        res.send(jsonBuffer);
+    } catch (error) {
+        // Return a 500 server error if something goes wrong
+        res.status(500).send('Error processing the SB3 file.');
     }
 });
 
