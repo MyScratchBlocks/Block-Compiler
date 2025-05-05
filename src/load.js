@@ -55,16 +55,22 @@ router.get('/projects/:id/user', (req, res) => {
     }
 });
 
-function generate24CharCode() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let code = '';
-  for (let i = 0; i < 24; i++) {
-    const randomIndex = Math.floor(Math.random() * chars.length);
-    code += chars[randomIndex];
-  }
-  return code;
+function generateProjectToken() {
+  const timestamp = Date.now();
+  let hexString = '';
+  const hexChars = 'abcdef0123456789';
+
+  for (let i = 0; i < 128; i++) {
+    const randIndex = Math.floor(Math.random() * hexChars.length);
+    hexString += hexChars[randIndex];
+  }
+
+  return `${timestamp}_${hexString}`;
 }
 
 router.get('/api/projects/:id', (req, res) => {
- 
+  const token = generateProjectToken();
+  res.json({ project_token: token });
+});
+
 module.exports = router;
