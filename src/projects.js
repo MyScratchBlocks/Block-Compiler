@@ -1,26 +1,31 @@
 const express = require('express');
+const axios = require('axios');
 const router = express.Router();
 
-let projects = [];
+const GITHUB_API_URL = 'https://api.github.com/repos/CodeSnap-ORG/Editor-Compiler/contents/uploads';
+const THUMBNAIL_URL = 'https://codesnap-org.github.io/projects/static/assets/018f79360b10f9f2c317d648d61a0eb2.svg';
 
 // GET /api/projects
-router.get('/api/projects', (req, res) => {
-  res.json({ projects });
-});
+router.get('/api/projects', async (req, res) => {
+  try {
+    const response = await axios.get(GITHUB_API_URL, {
+      headers: { 'User-Agent': 'CodeSnap-Agent' }
+    });
 
-// POST /api/projects
-router.post('/api/projects', (req, res) => {
-  const { name, thumbnail, genre, link } = req.body;
+    const sb3Files = response.data.filter(file => file.name.endsWith('.sb3'));
 
-  const project = {
-    name,
-    image: thumbnail,
-    genre,
-    link: link
-  };
+    const projects = sb3Files.map(file => ({
+      name: file.name.replace(/\.sb3$/, ''),
+      image: THUMBNAIL_URL,
+      genre: 'games',
+      link: `https://codesnap-org.github.io/projects/#${file.name}`
+    }));
 
-  projects.push(project);
-  res.status(201).json({ message: 'Project added', project });
+    res.json({ projects });
+  } catch (error) {
+    console.error('Error fetching from GitHub:', error.message);
+    res.status(500).json({ error: 'Failed to fetch projects from GitHub' });
+  }
 });
 
 module.exports = router;
