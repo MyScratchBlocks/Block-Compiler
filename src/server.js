@@ -9,8 +9,8 @@ const projectsRoute = require('./projects');
 const commentRoute = require('./test');
 
 dotenv.config();
-app.use(cors());
 const app = express();
+app.use(cors())
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
