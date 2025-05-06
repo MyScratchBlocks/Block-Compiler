@@ -26,7 +26,7 @@ router.get('/api/projects', async (req, res) => {
       name: file.name.replace(/\.sb3$/, ''), // Remove the file extension
       image: THUMBNAIL_URL, // Static thumbnail for now
       genre: 'games', // Static genre for now
-      link: `https://codesnap-org.github.io/projects/#${file.name}` // Link to the project
+      link: `https://codesnap-org.github.io/projects/?project_url=https://block-compiler-codesnap.onrender.com/projects/${file.name}` // Link to the project
     }));
 
     // Send the projects array as a JSON response
