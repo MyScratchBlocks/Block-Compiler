@@ -5,6 +5,11 @@ const fs = require('fs');
 const AdmZip = require('adm-zip');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const crypto = require('crypto');
+
+function md5Hash(input) {
+  return crypto.createHash('md5').update(input).digest('hex');
+}
 
 const router = express.Router();
 const upload = multer({ dest: 'temp_uploads/' });
@@ -252,7 +257,8 @@ router.get('/json/:id', async (req, res) => {
 
 // Serve individual assets by MD5 (e.g. abc123.png)
 router.get('/assets/:assetName', async (req, res) => {
-    const assetName = req.params.assetName;
+    const assetName2 = req.params.assetName;
+    const assetName = md5Hash(assetName2);
 
     try {
         const response = await axios.get(
