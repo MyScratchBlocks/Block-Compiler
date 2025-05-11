@@ -7,6 +7,7 @@ const uploadRoute = require('./upload');
 const fetcherRoute = require('./fetcher');
 const projectsRoute = require('./projects');
 const commentRoute = require('./test');
+const clientRoute = require('./client');
 
 dotenv.config();
 const app = express();
@@ -19,6 +20,7 @@ app.use(loadRoute);
 app.use(fetcherRoute);
 app.use(projectsRoute);
 app.use(uploadRoute);
+app.use(clientRoute);
 app.use('/api/comments', commentRoute);
 
 app.listen(PORT, () => {
