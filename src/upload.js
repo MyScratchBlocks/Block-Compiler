@@ -169,4 +169,49 @@ router.post('/', upload.single('project'), async (req, res) => {
     }
 });
 
+
+// GET route to retrieve project metadata (data.json)
+router.get('/api/projects/:id/meta', async (req, res) => {
+    const projectId = req.params.id;
+    const githubFilePath = `${GITHUB_UPLOAD_PATH}/${projectId}.sb3`;
+
+    try {
+        // Step 1: Fetch the project file (the .sb3 file) from GitHub
+        const response = await axios.get(
+            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${githubFilePath}`,
+            {
+                headers: {
+                    Authorization: `Bearer ${GITHUB_TOKEN}`,
+                    'User-Agent': 'CodeSnap-Uploader',
+                    Accept: 'application/vnd.github+json',
+                },
+            }
+        );
+
+        // Step 2: Download the .sb3 file and unzip it to read the data.json
+        const fileContent = Buffer.from(response.data.content, 'base64');
+        const zip = new AdmZip(fileContent);
+
+        // Step 3: Read data.json from the .sb3 archive
+        const dataJsonText = zip.readAsText('data.json');
+
+        if (!dataJsonText) {
+            return res.status(404).json({ error: 'data.json not found in the project file.' });
+        }
+
+        // Step 4: Parse and return the data.json content
+        const dataJson = JSON.parse(dataJsonText);
+
+        // Step 5: Send the data.json as the response
+        res.json(dataJson);
+    } catch (err) {
+        console.error('Error retrieving metadata:', err.response?.data || err.message);
+        res.status(500).json({
+            error: 'Failed to retrieve project metadata',
+            details: err.response?.data || err.message,
+        });
+    }
+});
+
+
 module.exports = router;
