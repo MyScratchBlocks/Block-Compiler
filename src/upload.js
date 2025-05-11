@@ -157,7 +157,8 @@ router.post('/', upload.single('project'), async (req, res) => {
             message: 'Project uploaded successfully with embedded metadata',
             sb3File: githubFileName,
             githubUrl: uploadResponse.data.content.html_url,
-            projectData: dataJson
+            projectData: dataJson,
+            id: fileNum
         });
 
     } catch (err) {
