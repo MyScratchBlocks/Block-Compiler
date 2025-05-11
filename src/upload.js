@@ -6,7 +6,6 @@ const AdmZip = require('adm-zip');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 
-let pData = [];
 const router = express.Router();
 const upload = multer({ dest: 'temp_uploads/' });
 
@@ -19,6 +18,7 @@ if (!GITHUB_TOKEN) {
     throw new Error('Missing GITHUB_TOKEN in environment variables');
 }
 
+// Helper function to get the next available file number for .sb3 files
 async function getNextFileNumber() {
     try {
         const response = await axios.get(
@@ -43,10 +43,10 @@ async function getNextFileNumber() {
     }
 }
 
+// POST route to handle the file upload
 router.post('/', upload.single('project'), async (req, res) => {
-    const username = req.body.username;
-    const projectName = req.body.projectName;
-    pData.push(username);
+    const username = req.body.username || 'unknown_user';
+    const projectName = req.body.projectName || 'Untitled';
 
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
@@ -55,70 +55,54 @@ router.post('/', upload.single('project'), async (req, res) => {
     const filePath = req.file.path;
 
     try {
+        // Step 1: Get the next available file number for the .sb3 file
         const fileNum = await getNextFileNumber();
         const githubFileName = `${fileNum}.sb3`;
         const githubFilePath = `${GITHUB_UPLOAD_PATH}/${githubFileName}`;
 
-        const fileContent = fs.readFileSync(filePath);
-        const base64Content = fileContent.toString('base64');
-
-        // Upload the .sb3 file to GitHub
-        const uploadResponse = await axios.put(
-            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${githubFilePath}`,
-            {
-                message: `Upload project #${fileNum}`,
-                content: base64Content
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${GITHUB_TOKEN}`,
-                    'User-Agent': 'CodeSnap-Uploader',
-                    Accept: 'application/vnd.github+json'
-                }
-            }
-        );
-
-        // ----------- Extract and Build Metadata JSON ----------
+        // Step 2: Unzip the uploaded .sb3 file
         const zip = new AdmZip(filePath);
-        const projectJson = zip.readAsText('project.json');
-        const projectData = JSON.parse(projectJson);
+        const projectJson = JSON.parse(zip.readAsText('project.json'));
 
-        const randomToken = `${Date.now()}_${uuidv4().replace(/-/g, '')}`;
-        const metadata = {
+        // Step 3: Generate the metadata for data.json
+        const timestamp = Date.now();
+        const token = `${timestamp}_${uuidv4().replace(/-/g, '')}`;
+
+        const dataJson = {
             id: fileNum,
-            title: projectData.info?.title || projectName || 'Untitled Project',
-            description: projectData.info?.description || '',
-            instructions: projectData.info?.instructions || '',
-            visibility: "visible",
+            title: projectJson.info?.title || projectName,
+            description: projectJson.info?.description || '',
+            instructions: projectJson.info?.instructions || '',
+            visibility: 'visible',
             public: true,
             comments_allowed: true,
             is_published: true,
             author: {
                 id: Math.floor(Math.random() * 1000000000),
-                username: username || "unknown_user",
+                username: username,
                 scratchteam: false,
                 history: {
-                    joined: "1900-01-01T00:00:00.000Z"
+                    joined: '1900-01-01T00:00:00.000Z'
                 },
                 profile: {
                     id: null,
                     images: {
-                        "90x90": "",
-                        "60x60": "",
-                        "55x55": "",
-                        "50x50": "",
-                        "32x32": ""
+                        '90x90': 'https://trampoline.turbowarp.org/avatars/1',
+                        '60x60': 'https://trampoline.turbowarp.org/avatars/1',
+                        '55x55': 'https://trampoline.turbowarp.org/avatars/1',
+                        '50x50': 'https://trampoline.turbowarp.org/avatars/1',
+                        '32x32': 'https://trampoline.turbowarp.org/avatars/1'
                     }
                 }
             },
             image: `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_480x360.png`,
             images: {
-                "282x218": `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_282x218.png?v=${Date.now()}`,
-                "216x163": `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_216x163.png?v=${Date.now()}`,
-                "200x200": `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_200x200.png?v=${Date.now()}`,
-                "144x108": `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_144x108.png?v=${Date.now()}`,
-                "135x102": `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_135x102.png?v=${Date.now()}`,
-                "100x80": `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_100x80.png?v=${Date.now()}`
+                '282x218': `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_282x218.png?v=${timestamp}`,
+                '216x163': `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_216x163.png?v=${timestamp}`,
+                '200x200': `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_200x200.png?v=${timestamp}`,
+                '144x108': `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_144x108.png?v=${timestamp}`,
+                '135x102': `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_135x102.png?v=${timestamp}`,
+                '100x80': `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_100x80.png?v=${timestamp}`
             },
             history: {
                 created: new Date().toISOString(),
@@ -135,19 +119,25 @@ router.post('/', upload.single('project'), async (req, res) => {
                 parent: null,
                 root: null
             },
-            project_token: randomToken
+            project_token: token
         };
 
-        const metaFileName = `${fileNum}_data.json`;
-        const metaFilePath = `${GITHUB_UPLOAD_PATH}/${metaFileName}`;
-        const metaContent = Buffer.from(JSON.stringify(metadata, null, 2)).toString('base64');
+        // Step 4: Add data.json to the zip without removing project.json
+        zip.addFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
 
-        // Upload data.json to GitHub
-        await axios.put(
-            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${metaFilePath}`,
+        // Step 5: Save the modified .sb3 file
+        const modifiedSb3Path = path.join('temp_uploads', `${fileNum}_modified.sb3`);
+        zip.writeZip(modifiedSb3Path);
+
+        // Step 6: Upload the modified .sb3 to GitHub
+        const fileContent = fs.readFileSync(modifiedSb3Path);
+        const base64Content = fileContent.toString('base64');
+
+        const uploadResponse = await axios.put(
+            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${githubFilePath}`,
             {
-                message: `Add metadata for project #${fileNum}`,
-                content: metaContent
+                message: `Upload project #${fileNum}`,
+                content: base64Content
             },
             {
                 headers: {
@@ -158,13 +148,16 @@ router.post('/', upload.single('project'), async (req, res) => {
             }
         );
 
+        // Clean up temporary files
         fs.unlinkSync(filePath);
+        fs.unlinkSync(modifiedSb3Path);
 
+        // Step 7: Respond with success
         res.json({
-            message: 'Project and metadata uploaded successfully',
+            message: 'Project uploaded successfully with embedded metadata',
             sb3File: githubFileName,
-            metadataFile: metaFileName,
-            url: uploadResponse.data.content.html_url
+            githubUrl: uploadResponse.data.content.html_url,
+            projectData: dataJson
         });
 
     } catch (err) {
