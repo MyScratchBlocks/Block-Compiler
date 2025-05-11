@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const axios = require('axios');
 const router = express.Router();
+const AdmZip = require('adm-zip');
 
 const GITHUB_API_URL = 'https://api.github.com/repos/CodeSnap-ORG/Editor-Compiler/contents/uploads';
 const THUMBNAIL_URL = 'https://codesnap-org.github.io/projects/static/assets/018f79360b10f9f2c317d648d61a0eb2.svg';
@@ -21,21 +22,31 @@ router.get('/api/projects', async (req, res) => {
     // Filter .sb3 project files
     const sb3Files = allFiles.filter(file => file.name.endsWith('.sb3'));
 
-    // Filter files with no extension (used for naming)
-    const fWE = allFiles.filter(file => !path.extname(file.name));
+    const projects = [];
 
-    // Map each sb3 file to a project, using name from the matching fWE file if it exists
-    const projects = sb3Files.map(file => {
-      const baseName = file.name.replace(/\.sb3$/, '');
-      const matchingFWE = fWE.find(f => f.name === baseName);
+    for (const file of sb3Files) {
+      try {
+        // Download the .sb3 file
+        const fileResponse = await axios.get(file.download_url, { responseType: 'arraybuffer' });
+        const zip = new AdmZip(fileResponse.data);
 
-      return {
-        name: matchingFWE ? matchingFWE.name : baseName,
-        image: THUMBNAIL_URL,
-        genre: 'games',
-        link: `https://codesnap-org.github.io/projects/?project_url=https://block-compiler-codesnap.onrender.com/projects/${file.name}`
-      };
-    });
+        // Try to find and read data.json
+        const dataJsonEntry = zip.getEntry('data.json');
+        if (!dataJsonEntry) continue;
+
+        const data = JSON.parse(dataJsonEntry.getData().toString('utf8'));
+
+        // Add to projects list
+        projects.push({
+          name: data.title || file.name.replace(/\.sb3$/, ''),
+          image: THUMBNAIL_URL,
+          genre: 'games',
+          link: `https://codesnap-org.github.io/projects/?project_url=https://block-compiler-codesnap.onrender.com/projects/${data.id}`
+        });
+      } catch (err) {
+        console.warn(`Skipping ${file.name} due to error:`, err.message);
+      }
+    }
 
     res.json({ projects });
   } catch (error) {
