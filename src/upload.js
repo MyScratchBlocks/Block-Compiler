@@ -249,48 +249,67 @@ router.get('/json/:id', async (req, res) => {
     }
 });
 
-// GET route to search for an asset across all .sb3 files
+// GET route to retrieve a specific asset by its name (e.g., md5hash.png or md5hash.wav)
 router.get('/assets/:assetName', async (req, res) => {
     const assetName = req.params.assetName;
+    const githubDirUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_UPLOAD_PATH}`;
 
     try {
-        const response = await axios.get(
-            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_UPLOAD_PATH}`,
-            {
-                headers: {
-                    Authorization: `Bearer ${GITHUB_TOKEN}`,
-                    'User-Agent': 'CodeSnap-Uploader',
-                    Accept: 'application/vnd.github+json',
-                },
+        // Step 1: List all .sb3 files in the GitHub uploads directory
+        const listRes = await axios.get(githubDirUrl, {
+            headers: {
+                Authorization: `Bearer ${GITHUB_TOKEN}`,
+                'User-Agent': 'CodeSnap-Uploader',
+                Accept: 'application/vnd.github+json',
             }
-        );
+        });
 
-        const sb3Files = response.data.filter(file => file.name.endsWith('.sb3'));
+        const sb3Files = listRes.data.filter(file => file.name.endsWith('.sb3'));
 
+        // Step 2: Search each project for the requested asset
         for (const file of sb3Files) {
             const fileRes = await axios.get(file.download_url, {
-                responseType: 'arraybuffer',
+                responseType: 'arraybuffer'
             });
 
             const zip = new AdmZip(Buffer.from(fileRes.data));
             const entry = zip.getEntry(assetName);
 
             if (entry) {
-                res.setHeader('Content-Type', 'application/octet-stream');
-                res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
-                return res.send(zip.toBuffer());
+                const assetBuffer = entry.getData();
+
+                res.setHeader('Access-Control-Allow-Origin', '*'); // Allow loading in browsers
+                res.setHeader('Content-Type', getMimeType(assetName));
+                res.setHeader('Content-Disposition', `inline; filename="${assetName}"`);
+                return res.send(assetBuffer);
             }
         }
 
-        res.status(404).json({ error: `Asset "${assetName}" not found in any project.` });
+        return res.status(404).json({ error: `Asset "${assetName}" not found in any .sb3 project.` });
     } catch (err) {
-        console.error('Error retrieving asset:', err.response?.data || err.message);
-        res.status(500).json({
+        console.error('Asset fetch error:', err.response?.data || err.message);
+        return res.status(500).json({
             error: 'Failed to retrieve asset',
             details: err.response?.data || err.message,
         });
     }
 });
 
+// Helper function to detect correct MIME type
+function getMimeType(filename) {
+    const ext = path.extname(filename).toLowerCase();
+    switch (ext) {
+        case '.png': return 'image/png';
+        case '.svg': return 'image/svg+xml';
+        case '.jpg':
+        case '.jpeg': return 'image/jpeg';
+        case '.bmp': return 'image/bmp';
+        case '.gif': return 'image/gif';
+        case '.wav': return 'audio/wav';
+        case '.mp3': return 'audio/mpeg';
+        case '.json': return 'application/json';
+        default: return 'application/octet-stream';
+    }
+}
 
 module.exports = router;
