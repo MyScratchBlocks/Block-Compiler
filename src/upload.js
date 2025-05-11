@@ -213,5 +213,84 @@ router.get('/api/projects/:id/meta', async (req, res) => {
     }
 });
 
+// GET route to retrieve project.json from a specific .sb3 file
+router.get('/json/:id', async (req, res) => {
+    const projectId = req.params.id;
+    const githubFilePath = `${GITHUB_UPLOAD_PATH}/${projectId}.sb3`;
+
+    try {
+        const response = await axios.get(
+            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${githubFilePath}`,
+            {
+                headers: {
+                    Authorization: `Bearer ${GITHUB_TOKEN}`,
+                    'User-Agent': 'CodeSnap-Uploader',
+                    Accept: 'application/vnd.github+json',
+                },
+            }
+        );
+
+        const fileContent = Buffer.from(response.data.content, 'base64');
+        const zip = new AdmZip(fileContent);
+        const projectJsonText = zip.readAsText('project.json');
+
+        if (!projectJsonText) {
+            return res.status(404).json({ error: 'project.json not found in the project file.' });
+        }
+
+        const projectJson = JSON.parse(projectJsonText);
+        res.json(projectJson);
+    } catch (err) {
+        console.error('Error retrieving project.json:', err.response?.data || err.message);
+        res.status(500).json({
+            error: 'Failed to retrieve project.json',
+            details: err.response?.data || err.message,
+        });
+    }
+});
+
+// GET route to search for an asset across all .sb3 files
+router.get('/assets/:assetName', async (req, res) => {
+    const assetName = req.params.assetName;
+
+    try {
+        const response = await axios.get(
+            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_UPLOAD_PATH}`,
+            {
+                headers: {
+                    Authorization: `Bearer ${GITHUB_TOKEN}`,
+                    'User-Agent': 'CodeSnap-Uploader',
+                    Accept: 'application/vnd.github+json',
+                },
+            }
+        );
+
+        const sb3Files = response.data.filter(file => file.name.endsWith('.sb3'));
+
+        for (const file of sb3Files) {
+            const fileRes = await axios.get(file.download_url, {
+                responseType: 'arraybuffer',
+            });
+
+            const zip = new AdmZip(Buffer.from(fileRes.data));
+            const entry = zip.getEntry(assetName);
+
+            if (entry) {
+                res.setHeader('Content-Type', 'application/octet-stream');
+                res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
+                return res.send(zip.toBuffer());
+            }
+        }
+
+        res.status(404).json({ error: `Asset "${assetName}" not found in any project.` });
+    } catch (err) {
+        console.error('Error retrieving asset:', err.response?.data || err.message);
+        res.status(500).json({
+            error: 'Failed to retrieve asset',
+            details: err.response?.data || err.message,
+        });
+    }
+});
+
 
 module.exports = router;
