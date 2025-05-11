@@ -2,21 +2,23 @@ const express = require('express');
 const multer = require('multer');
 const axios = require('axios');
 const fs = require('fs');
+const AdmZip = require('adm-zip');
+const { v4: uuidv4 } = require('uuid');
+const path = require('path');
 
 let pData = [];
 const router = express.Router();
-const upload = multer({ dest: 'temp_uploads/' });  // Temporary folder for file uploads
+const upload = multer({ dest: 'temp_uploads/' });
 
 const GITHUB_REPO = 'Editor-Compiler';
 const GITHUB_OWNER = 'CodeSnap-ORG';
 const GITHUB_UPLOAD_PATH = 'uploads';
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;  // Ensure this is set in your environment
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
 if (!GITHUB_TOKEN) {
     throw new Error('Missing GITHUB_TOKEN in environment variables');
 }
 
-// Helper function to get the next available file number for .sb3 files
 async function getNextFileNumber() {
     try {
         const response = await axios.get(
@@ -29,24 +31,18 @@ async function getNextFileNumber() {
             }
         );
 
-        // Filter for files with .sb3 extension and get their numeric part to find the next number
         const files = response.data
             .filter(file => file.name.endsWith('.sb3'))
             .map(file => parseInt(file.name))
             .filter(n => !isNaN(n));
 
-        const max = files.length ? Math.max(...files) : 0;
-        return max + 1;  // Return the next available file number
+        return files.length ? Math.max(...files) + 1 : 1;
     } catch (err) {
-        if (err.response?.status === 404) {
-            // If folder doesn't exist, start from 1
-            return 1;
-        }
+        if (err.response?.status === 404) return 1;
         throw err;
     }
 }
 
-// POST route to handle file upload and create metadata file
 router.post('/', upload.single('project'), async (req, res) => {
     const username = req.body.username;
     const projectName = req.body.projectName;
@@ -56,19 +52,17 @@ router.post('/', upload.single('project'), async (req, res) => {
         return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const filePath = req.file.path;  // Temporary file path
+    const filePath = req.file.path;
 
     try {
-        // Step 1: Get the next available file number for the .sb3 file
         const fileNum = await getNextFileNumber();
         const githubFileName = `${fileNum}.sb3`;
         const githubFilePath = `${GITHUB_UPLOAD_PATH}/${githubFileName}`;
 
-        // Step 2: Read and encode the uploaded .sb3 file in base64
         const fileContent = fs.readFileSync(filePath);
         const base64Content = fileContent.toString('base64');
 
-        // Step 3: Upload the .sb3 file to GitHub
+        // Upload the .sb3 file to GitHub
         const uploadResponse = await axios.put(
             `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${githubFilePath}`,
             {
@@ -84,20 +78,75 @@ router.post('/', upload.single('project'), async (req, res) => {
             }
         );
 
-        // Step 4: Create an additional metadata file based on projectName (no file extension)
-        const safeProjectName = projectName.replace(/[^a-z0-9_\-]/gi, '_').toLowerCase();
-        const projectMetaPath = `${GITHUB_UPLOAD_PATH}/${safeProjectName}`;
+        // ----------- Extract and Build Metadata JSON ----------
+        const zip = new AdmZip(filePath);
+        const projectJson = zip.readAsText('project.json');
+        const projectData = JSON.parse(projectJson);
 
-        // Create metadata content for the project file
-        const metaContent = Buffer.from(
-            `Username: ${username}\nProject: ${projectName}\nUploaded as: ${githubFileName}\n`
-        ).toString('base64');
+        const randomToken = `${Date.now()}_${uuidv4().replace(/-/g, '')}`;
+        const metadata = {
+            id: fileNum,
+            title: projectData.info?.title || projectName || 'Untitled Project',
+            description: projectData.info?.description || '',
+            instructions: projectData.info?.instructions || '',
+            visibility: "visible",
+            public: true,
+            comments_allowed: true,
+            is_published: true,
+            author: {
+                id: Math.floor(Math.random() * 1000000000),
+                username: username || "unknown_user",
+                scratchteam: false,
+                history: {
+                    joined: "1900-01-01T00:00:00.000Z"
+                },
+                profile: {
+                    id: null,
+                    images: {
+                        "90x90": "",
+                        "60x60": "",
+                        "55x55": "",
+                        "50x50": "",
+                        "32x32": ""
+                    }
+                }
+            },
+            image: `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_480x360.png`,
+            images: {
+                "282x218": `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_282x218.png?v=${Date.now()}`,
+                "216x163": `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_216x163.png?v=${Date.now()}`,
+                "200x200": `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_200x200.png?v=${Date.now()}`,
+                "144x108": `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_144x108.png?v=${Date.now()}`,
+                "135x102": `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_135x102.png?v=${Date.now()}`,
+                "100x80": `https://cdn2.scratch.mit.edu/get_image/project/${fileNum}_100x80.png?v=${Date.now()}`
+            },
+            history: {
+                created: new Date().toISOString(),
+                modified: new Date().toISOString(),
+                shared: new Date().toISOString()
+            },
+            stats: {
+                views: 0,
+                loves: 0,
+                favorites: 0,
+                remixes: 0
+            },
+            remix: {
+                parent: null,
+                root: null
+            },
+            project_token: randomToken
+        };
 
-        // Step 5: Upload the metadata file to GitHub
+        const metaFileName = `${fileNum}_data.json`;
+        const metaFilePath = `${GITHUB_UPLOAD_PATH}/${metaFileName}`;
+        const metaContent = Buffer.from(JSON.stringify(metadata, null, 2)).toString('base64');
+
+        // Upload data.json to GitHub
         await axios.put(
-            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${projectMetaPath}`,
+            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${metaFilePath}`,
             {
-                message: `Add metadata file for ${projectName}`,
+                message: `Add metadata for project #${fileNum}`,
                 content: metaContent
             },
             {
@@ -109,14 +158,12 @@ router.post('/', upload.single('project'), async (req, res) => {
             }
         );
 
-        // Clean up the temporary file after upload
         fs.unlinkSync(filePath);
 
-        // Respond with success message
         res.json({
-            message: 'Uploaded to GitHub',
+            message: 'Project and metadata uploaded successfully',
             sb3File: githubFileName,
-            metadataFile: projectMetaPath,
+            metadataFile: metaFileName,
             url: uploadResponse.data.content.html_url
         });
 
