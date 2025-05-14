@@ -256,9 +256,9 @@ router.get('/json/:id', async (req, res) => {
 });
 
 // Serve individual assets by MD5 (e.g. abc123.png)
-router.get('/assets/:assetName', async (req, res) => {
-    const assetName2 = req.params.assetName;
-    const assetName = md5Hash(assetName2);
+router.get('/assets/:assetId.:dataFormat/get', async (req, res) => {
+    const { assetId, dataFormat } = req.params;
+    const filename = `${assetId}.${dataFormat}`;
 
     try {
         const response = await axios.get(
@@ -276,9 +276,9 @@ router.get('/assets/:assetName', async (req, res) => {
         for (const file of sb3Files) {
             const fileData = await axios.get(file.download_url, { responseType: 'arraybuffer' });
             const zip = new AdmZip(Buffer.from(fileData.data));
-            const assetEntry = zip.getEntry(assetName);
+            const assetEntry = zip.getEntry(filename);
             if (assetEntry) {
-                const contentType = getMimeType(assetName);
+                const contentType = getMimeType(filename);
                 res.setHeader('Content-Type', contentType);
                 return res.send(assetEntry.getData());
             }
@@ -290,6 +290,7 @@ router.get('/assets/:assetName', async (req, res) => {
         res.status(500).json({ error: 'Internal error retrieving asset' });
     }
 });
+
 
 // Helper
 function getMimeType(filename) {
