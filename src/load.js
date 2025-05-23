@@ -5,9 +5,9 @@ const { users } = require('./upload');
 const router = express.Router();
  
 const GITHUB_REPO = 'Editor-Compiler';
-const GITHUB_OWNER = 'CodeSnap-ORG';
+const GITHUB_OWNER = 'MyScratchBlocks';
 const GITHUB_UPLOAD_PATH = 'uploads';
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const GITHUB_TOKEN = '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';
 
 if (!GITHUB_TOKEN) {
     throw new Error('Missing GITHUB_TOKEN in environment variables');
