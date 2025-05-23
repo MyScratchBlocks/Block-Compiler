@@ -31,7 +31,7 @@ async function getNextFileNumber() {
             {
                 headers: {
                     Authorization: `Bearer ${GITHUB_TOKEN}`,
-                    'User-Agent': 'CodeSnap-Uploader'
+                    'User-Agent': 'MyScratchBlocks-Uploader'
                 }
             }
         );
@@ -147,7 +147,7 @@ router.post('/', upload.single('project'), async (req, res) => {
             {
                 headers: {
                     Authorization: `Bearer ${GITHUB_TOKEN}`,
-                    'User-Agent': 'CodeSnap-Uploader',
+                    'User-Agent': 'MyScratchBlocks-Uploader',
                     Accept: 'application/vnd.github+json'
                 }
             }
@@ -188,7 +188,7 @@ router.get('/api/projects/:id/meta', async (req, res) => {
             {
                 headers: {
                     Authorization: `Bearer ${GITHUB_TOKEN}`,
-                    'User-Agent': 'CodeSnap-Uploader',
+                    'User-Agent': 'MyScratchBlocks-Uploader',
                     Accept: 'application/vnd.github+json',
                 },
             }
@@ -230,7 +230,7 @@ router.get('/json/:id', async (req, res) => {
             {
                 headers: {
                     Authorization: `Bearer ${GITHUB_TOKEN}`,
-                    'User-Agent': 'CodeSnap-Uploader',
+                    'User-Agent': 'MyScratchBlocks-Uploader',
                     Accept: 'application/vnd.github+json',
                 },
             }
