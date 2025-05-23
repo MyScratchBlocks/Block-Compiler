@@ -45,7 +45,7 @@ async function fetchAndParseSb3(url) {
 // Route to fetch and return project.json from a .sb3 file
 router.get('/:id', async (req, res) => {
     const sb3Id = req.params.id; // Extract the 'id' from the URL
-    const sb3Url = `https://raw.githubusercontent.com/CodeSnap-ORG/Editor-Compiler/main/uploads/${sb3Id}.sb3`; // Dynamic URL
+    const sb3Url = `https://raw.githubusercontent.com/MyScratchBlocks/Editor-Compiler/main/uploads/${sb3Id}.sb3`; // Dynamic URL
 
     try {
         // Fetch and parse the SB3 file
