@@ -15,9 +15,9 @@ const router = express.Router();
 const upload = multer({ dest: 'temp_uploads/' });
 
 const GITHUB_REPO = 'Editor-Compiler';
-const GITHUB_OWNER = 'CodeSnap-ORG';
+const GITHUB_OWNER = 'MyScratchBlocks';
 const GITHUB_UPLOAD_PATH = 'uploads';
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const GITHUB_TOKEN = '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';
 
 if (!GITHUB_TOKEN) {
     throw new Error('Missing GITHUB_TOKEN in environment variables');
@@ -256,9 +256,9 @@ router.get('/json/:id', async (req, res) => {
 });
 
 // Serve individual assets by MD5 (e.g. abc123.png)
-router.get('/assets/:assetId.:dataFormat/get', async (req, res) => {
-    const { assetId, dataFormat } = req.params;
-    const filename = `${assetId}.${dataFormat}`;
+router.get('/assets/:assetId', async (req, res) => {
+    const { assetId } = req.params;
+    const filename = `${assetId}`;
 
     try {
         const response = await axios.get(
