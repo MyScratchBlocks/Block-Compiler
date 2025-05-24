@@ -10,12 +10,12 @@ const THUMBNAIL_URL = 'https://codesnap-org.github.io/projects/static/assets/018
 // GET /api/projects
 router.get('/api/projects', async (req, res) => {
   try {
-    const response = await axios.get(GITHUB_API_URL, {
-      headers: { 
-        'User-Agent': 'MyScratchBlocks-Agent',
-        'Authorization': `token ${PROCESS.ENV.GITHUB_TOKEN}`
-      }
-    });
+    const headers = { 'User-Agent': 'MyScratchBlocks-Agent' };
+    if (process.env.GITHUB_TOKEN) {
+      headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+    }
+
+    const response = await axios.get(GITHUB_API_URL, { headers });
 
     const allFiles = response.data;
 
