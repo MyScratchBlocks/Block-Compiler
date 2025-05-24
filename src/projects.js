@@ -13,7 +13,7 @@ router.get('/api/projects', async (req, res) => {
     const response = await axios.get(GITHUB_API_URL, {
       headers: { 
         'User-Agent': 'MyScratchBlocks-Agent',
-        'Authorization': `token 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`
+        'Authorization': `token ${PROCESS.ENV.GITHUB_TOKEN}`
       }
     });
 
