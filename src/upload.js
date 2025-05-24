@@ -17,7 +17,7 @@ const upload = multer({ dest: 'temp_uploads/' });
 const GITHUB_REPO = 'Editor-Compiler';
 const GITHUB_OWNER = 'MyScratchBlocks';
 const GITHUB_UPLOAD_PATH = 'uploads';
-const GITHUB_TOKEN = process.env.GITHUB_TOKRN;
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
 if (!GITHUB_TOKEN) {
     throw new Error('Missing GITHUB_TOKEN in environment variables');
