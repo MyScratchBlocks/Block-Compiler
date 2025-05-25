@@ -187,7 +187,6 @@ router.get('/api/projects/:id/meta', async (req, res) => {
             `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${githubFilePath}`,
             {
                 headers: {
-                    Authorization: `Bearer ${GITHUB_TOKEN}`,
                     'User-Agent': 'MyScratchBlocks-Uploader',
                     Accept: 'application/vnd.github+json',
                 },
@@ -229,7 +228,6 @@ router.get('/json/:id', async (req, res) => {
             `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${githubFilePath}`,
             {
                 headers: {
-                    Authorization: `Bearer ${GITHUB_TOKEN}`,
                     'User-Agent': 'MyScratchBlocks-Uploader',
                     Accept: 'application/vnd.github+json',
                 },
