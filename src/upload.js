@@ -188,5 +188,6 @@ router.get('/assets/:asset_name', (req, res) => {
 
   res.setHeader('Content-Type', getMimeType(assetId));
   res.sendFile(assetPath);
+});
 
 module.exports = router;
