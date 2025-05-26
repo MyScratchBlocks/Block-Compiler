@@ -177,9 +177,9 @@ router.get('/json/:id', (req, res) => {
 });
 
 // GET: Serve asset locally
-router.get('/assets/:asset_name.:file_name', (req, res) => {
-  const { asset_name, file_name } = req.params;
-  const assetId = `${asset_name}.${file_name}`;
+router.get('/assets/:asset_name', (req, res) => {
+  const { asset_name } = req.params;
+  const assetId = `${asset_name}`;
   const assetPath = path.join(LOCAL_ASSET_PATH, assetId);
 
   if (!fs.existsSync(assetPath)) {
