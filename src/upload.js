@@ -177,8 +177,9 @@ router.get('/json/:id', (req, res) => {
 });
 
 // GET: Serve asset locally
-router.get('/assets/:assetId', (req, res) => {
-  const { assetId } = req.params;
+router.get('/assets/:asset_name.:file_name', (req, res) => {
+  const { asset_name, file_name } = req.params;
+  const assetId = `${asset_name}.${file_name}`;
   const assetPath = path.join(LOCAL_ASSET_PATH, assetId);
 
   if (!fs.existsSync(assetPath)) {
@@ -187,6 +188,5 @@ router.get('/assets/:assetId', (req, res) => {
 
   res.setHeader('Content-Type', getMimeType(assetId));
   res.sendFile(assetPath);
-});
 
 module.exports = router;
