@@ -26,7 +26,7 @@ router.get('/api/projects', async (req, res) => {
         projects.push({
           name: data.title || file.replace(/\.sb3$/, ''),
           image: THUMBNAIL_URL,
-          author: data.author.username,
+          author: data.author?.username || 'Unknown User',
           link: `https://myscratchblocks.github.io/projects#${data.id}`
         });
       } catch (err) {
