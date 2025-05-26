@@ -8,8 +8,8 @@ const path = require('path');
 const router = express.Router();
 const upload = multer({ dest: 'temp_uploads/' });
 
-const LOCAL_UPLOAD_PATH = path.join(__dirname, 'local_storage/uploads');
-const LOCAL_ASSET_PATH = path.join(__dirname, 'local_storage/assets');
+const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
+const LOCAL_ASSET_PATH = path.join(__dirname, '..', 'local_storage/assets');
 
 if (!fs.existsSync(LOCAL_UPLOAD_PATH)) fs.mkdirSync(LOCAL_UPLOAD_PATH, { recursive: true });
 if (!fs.existsSync(LOCAL_ASSET_PATH)) fs.mkdirSync(LOCAL_ASSET_PATH, { recursive: true });
