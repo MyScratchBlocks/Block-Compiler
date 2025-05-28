@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const uploadRoute = require('./upload');
 const projectsRoute = require('./projects');
 const clientRoute = require('./client');
+const commentsRouter = require('./comments');
 
 dotenv.config();
 const app = express();
@@ -16,6 +17,7 @@ app.use(express.json());
 app.use(projectsRoute);
 app.use(uploadRoute);
 app.use(clientRoute);
+app.use('/api/comments', commentsRouter);
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
