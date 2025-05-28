@@ -196,7 +196,7 @@ router.get('/json/:id', (req, res) => {
 });
 
 // GET: Serve asset
-router.get('/assets/:asset_name', (req, res) => {
+router.get('/assets/internalapi/asset/:asset_name', (req, res) => {
   const assetPath = path.join(LOCAL_ASSET_PATH, req.params.asset_name);
   if (!fs.existsSync(assetPath)) {
     return res.status(404).json({ error: 'Asset not found' });
