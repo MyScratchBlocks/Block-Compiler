@@ -61,6 +61,7 @@ router.post('/', async (req, res) => {
     const fileNum = getNextFileNumber();
     const localFileName = `${fileNum}.sb3`;
     const localFilePath = path.join(LOCAL_UPLOAD_PATH, localFileName);
+    const username = req.body.username;
 
     const token = `${Date.now()}_${uuidv4().replace(/-/g, '')}`;
 
@@ -75,7 +76,7 @@ router.post('/', async (req, res) => {
       is_published: true,
       author: {
         id: Math.floor(Math.random() * 1000000000),
-        username: 'unknown_user',
+        username: username,
         scratchteam: false,
         history: { joined: '1900-01-01T00:00:00.000Z' },
         profile: {
