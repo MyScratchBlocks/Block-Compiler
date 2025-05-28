@@ -4,6 +4,7 @@ const fs = require('fs');
 const AdmZip = require('adm-zip');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
 const upload = multer({ dest: 'temp_uploads/' });
@@ -33,6 +34,26 @@ function getNextFileNumber() {
     .filter(n => !isNaN(n));
   return files.length ? Math.max(...files) + 1 : 1;
 }
+
+// Rate limiter for "view": 1 per project per IP per day
+const viewLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  max: 1,
+  keyGenerator: (req) => {
+    const projectId = req.params.id;
+    const ip = req.ip;
+    return `${projectId}_view_${ip}`;
+  },
+  message: { error: 'View limit reached for today' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// In-memory stores for "love" and "favourite" - to allow only one increment per project per IP ever
+const oneTimeActions = {
+  love: new Map(),       // Map of projectId -> Set of IPs that already liked
+  favourite: new Map()   // Map of projectId -> Set of IPs that already favourited
+};
 
 // POST: Upload project
 router.post('/', upload.single('project'), async (req, res) => {
@@ -185,18 +206,54 @@ router.get('/assets/:asset_name', (req, res) => {
 });
 
 // POST: Increment view/like/favorite in data.json
-router.post('/api/projects/:id/:action', (req, res) => {
+// Use rate limiter for views, manual check for love/favourite
+router.post('/api/projects/:id/:action', (req, res, next) => {
   const { id, action } = req.params;
   const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
+
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({ error: 'Project not found' });
   }
+
+  if (action === 'view') {
+    // Use the viewLimiter middleware for "view" actions
+    return viewLimiter(req, res, () => next());
+  } else if (action === 'love' || action === 'favourite') {
+    // Check if IP has already performed this action on this project
+    const ip = req.ip;
+    const map = oneTimeActions[action === 'love' ? 'love' : 'favourite'];
+
+    if (!map.has(id)) {
+      map.set(id, new Set());
+    }
+
+    if (map.get(id).has(ip)) {
+      return res.status(429).json({ error: `You have already ${action === 'love' ? 'liked' : 'favourited'} this project` });
+    }
+
+    // Mark that IP has done this action
+    map.get(id).add(ip);
+
+    // Proceed to next middleware to update the data.json
+    return next();
+  } else {
+    return res.status(400).json({ error: 'Invalid action' });
+  }
+}, (req, res) => {
+  // Actual incrementing handler after rate limiting or checks
+  const { id, action } = req.params;
+  const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
 
   try {
     const zip = new AdmZip(filePath);
     const dataJson = JSON.parse(zip.readAsText('data.json'));
 
-    const statKey = action === 'view' ? 'views' : action === 'love' ? 'loves' : 'favorites';
+    let statKey;
+    if (action === 'view') statKey = 'views';
+    else if (action === 'love') statKey = 'loves';
+    else if (action === 'favourite') statKey = 'favorites';
+    else return res.status(400).json({ error: 'Invalid action' });
+
     if (!dataJson.stats) dataJson.stats = {};
     dataJson.stats[statKey] = (dataJson.stats[statKey] || 0) + 1;
 
