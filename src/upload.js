@@ -185,7 +185,7 @@ router.get('/assets/:asset_name', (req, res) => {
 });
 
 // PATCH: Increment view/like/favorite in data.json
-router.patch('/api/projects/:id/:action(view|love|favorite)', (req, res) => {
+router.patch('/api/projects/:id/:action', (req, res) => {
   const { id, action } = req.params;
   const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
   if (!fs.existsSync(filePath)) {
