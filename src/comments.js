@@ -1,77 +1,114 @@
-// routes/comments.js
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const AdmZip = require('adm-zip'); // npm install adm-zip
+const { v4: uuidv4 } = require('uuid'); // npm install uuid
 const router = express.Router();
 
-const COMMENTS_FILE = path.join(__dirname, '..', 'comments.json');
+const PROJECTS_DIR = path.join(__dirname, '..', 'local_storage/uploads'); // Directory where .sb3 files are stored
 
-// Helper: read comments file or return empty array
-function readComments() {
-  try {
-    const data = fs.readFileSync(COMMENTS_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch {
-    return [];
-  }
+// Helper: Get full path to SB3 file
+function getProjectPath(projectId) {
+  return path.join(PROJECTS_DIR, `${projectId}.sb3`);
 }
 
-// Helper: write comments array to file
-function writeComments(comments) {
-  fs.writeFileSync(COMMENTS_FILE, JSON.stringify(comments, null, 2));
-}
-
-// Helper: recursively add reply to correct comment
-function addReply(comments, parentId, reply) {
-  for (const comment of comments) {
-    if (comment.id === parentId) {
-      comment.replies = comment.replies || [];
-      comment.replies.push(reply);
-      return true;
-    }
-    if (comment.replies && comment.replies.length > 0) {
-      if (addReply(comment.replies, parentId, reply)) return true;
+// Helper: Read comments from SB3
+function readCommentsFromSb3(projectPath) {
+  const zip = new AdmZip(projectPath);
+  const entry = zip.getEntry('comments.json');
+  if (entry) {
+    try {
+      const data = zip.readAsText(entry);
+      return JSON.parse(data);
+    } catch {
+      return [];
     }
   }
-  return false;
+  return [];
 }
 
-// GET all comments for a project
-router.get('/:projectId', (req, res) => {
+// Helper: Write comments into SB3
+function writeCommentsToSb3(projectPath, comments) {
+  const zip = new AdmZip(projectPath);
+  zip.deleteFile('comments.json'); // Remove old comments file
+  zip.addFile('comments.json', Buffer.from(JSON.stringify(comments, null, 2)));
+  zip.writeZip(projectPath);
+}
+
+// GET comments
+router.get('/:projectId/comments', (req, res) => {
   const projectId = req.params.projectId;
-  const allComments = readComments();
-  // Filter comments for this project (including replies)
-  const filtered = allComments.filter(c => c.projectId === projectId);
-  res.json(filtered);
+  const projectPath = getProjectPath(projectId);
+
+  if (!fs.existsSync(projectPath)) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  const comments = readCommentsFromSb3(projectPath);
+  res.json(comments);
 });
 
-// POST new comment or reply
-router.post('/:projectId', (req, res) => {
+// POST new comment
+router.post('/:projectId/comments', (req, res) => {
+  const { text } = req.body;
   const projectId = req.params.projectId;
-  const { username, text, parentId } = req.body;
+  const projectPath = getProjectPath(projectId);
 
-  if (!username || !text) return res.status(400).json({ error: 'Username and text required' });
+  if (!fs.existsSync(projectPath)) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
 
-  const allComments = readComments();
-
+  const comments = readCommentsFromSb3(projectPath);
   const newComment = {
-    id: Date.now().toString(),
-    username,
-    text,
+    id: uuidv4(),
     projectId,
-    parentId: parentId || null,
+    text,
+    createdAt: new Date().toISOString(),
+    user: { username: req.user?.username || 'Anonymous' },
     replies: []
   };
 
-  if (parentId) {
-    const success = addReply(allComments, parentId, newComment);
-    if (!success) return res.status(404).json({ error: 'Parent comment not found' });
-  } else {
-    allComments.push(newComment);
+  comments.push(newComment);
+  writeCommentsToSb3(projectPath, comments);
+
+  res.status(201).json({ success: true });
+});
+
+// POST reply to a comment
+router.post('/:projectId/comments/:commentId/reply', (req, res) => {
+  const { text } = req.body;
+  const { projectId, commentId } = req.params;
+  const projectPath = getProjectPath(projectId);
+
+  if (!fs.existsSync(projectPath)) {
+    return res.status(404).json({ error: 'Project not found' });
   }
 
-  writeComments(allComments);
-  res.status(201).json({ message: 'Comment saved' });
+  const comments = readCommentsFromSb3(projectPath);
+
+  function addReplyRecursive(commentList) {
+    for (const comment of commentList) {
+      if (comment.id === commentId) {
+        comment.replies = comment.replies || [];
+        comment.replies.push({
+          id: uuidv4(),
+          text,
+          createdAt: new Date().toISOString(),
+          user: { username: req.user?.username || 'Anonymous' }
+        });
+        return true;
+      }
+      if (comment.replies && addReplyRecursive(comment.replies)) return true;
+    }
+    return false;
+  }
+
+  if (!addReplyRecursive(comments)) {
+    return res.status(404).json({ error: 'Comment not found' });
+  }
+
+  writeCommentsToSb3(projectPath, comments);
+  res.status(201).json({ success: true });
 });
 
 module.exports = router;
