@@ -55,40 +55,27 @@ const oneTimeActions = {
   favourite: new Map()   // Map of projectId -> Set of IPs that already favourited
 };
 
-// POST: Upload project
-router.post('/', upload.single('project'), async (req, res) => {
-  const username = req.body.username || 'unknown_user';
-  const projectName = req.body.projectName || 'Untitled';
-
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
-  }
-
-  const filePath = req.file.path;
-
+// POST: Create a new empty project
+router.post('/', async (req, res) => {
   try {
     const fileNum = getNextFileNumber();
     const localFileName = `${fileNum}.sb3`;
     const localFilePath = path.join(LOCAL_UPLOAD_PATH, localFileName);
 
-    const zip = new AdmZip(filePath);
-    const projectJson = JSON.parse(zip.readAsText('project.json'));
-
-    const timestamp = Date.now();
-    const token = `${timestamp}_${uuidv4().replace(/-/g, '')}`;
+    const token = `${Date.now()}_${uuidv4().replace(/-/g, '')}`;
 
     const dataJson = {
       id: fileNum,
-      title: projectJson.info?.title || projectName,
-      description: projectJson.info?.description || '',
-      instructions: projectJson.info?.instructions || '',
+      title: 'Untitled',
+      description: '',
+      instructions: '',
       visibility: 'visible',
       public: true,
       comments_allowed: true,
       is_published: true,
       author: {
         id: Math.floor(Math.random() * 1000000000),
-        username,
+        username: 'unknown_user',
         scratchteam: false,
         history: { joined: '1900-01-01T00:00:00.000Z' },
         profile: {
@@ -122,40 +109,47 @@ router.post('/', upload.single('project'), async (req, res) => {
       project_token: token
     };
 
+  
+    // Create empty sb3 project with just project.json and data.json
+    const zip = new AdmZip();
+    zip.addFile('project.json', Buffer.from('{}', 'utf-8'));
     zip.addFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
-
-    // Extract and save assets
-    const assetEntries = zip.getEntries().filter(entry => {
-      const ext = path.extname(entry.entryName).toLowerCase();
-      return ['.png', '.svg', '.wav', '.mp3'].includes(ext);
-    });
-
-    for (const entry of assetEntries) {
-      const assetBuffer = entry.getData();
-      const assetPath = path.join(LOCAL_ASSET_PATH, entry.entryName);
-      const dir = path.dirname(assetPath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(assetPath, assetBuffer);
-    }
-
-    const modifiedSb3Path = path.join('temp_uploads', `${fileNum}_modified.sb3`);
-    zip.writeZip(modifiedSb3Path);
-
-    fs.copyFileSync(modifiedSb3Path, localFilePath);
-    fs.unlinkSync(filePath);
-    fs.unlinkSync(modifiedSb3Path);
+    zip.writeZip(localFilePath);
 
     res.json({
-      message: 'Project uploaded successfully',
+      message: 'Empty project created',
+      id: fileNum,
       sb3File: localFileName,
-      projectData: dataJson,
-      id: fileNum
+      projectData: dataJson
     });
   } catch (err) {
-    console.error('Upload error:', err.message);
-    res.status(500).json({ error: 'Upload failed', details: err.message });
+    console.error('Error creating empty project:', err.message);
+    res.status(500).json({ error: 'Failed to create project' });
   }
 });
+
+// POST: Save SB3 blob to existing project
+router.post('/:id/save', upload.single('project'), (req, res) => {
+  const { id } = req.params;
+  const sb3Blob = req.file;
+
+  if (!sb3Blob) {
+    return res.status(400).json({ error: 'No project file provided' });
+  }
+
+  const destPath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
+
+  try {
+    fs.copyFileSync(sb3Blob.path, destPath);
+    fs.unlinkSync(sb3Blob.path);
+
+    res.json({ message: 'Project saved successfully', id });
+  } catch (err) {
+    console.error('Save error:', err.message);
+    res.status(500).json({ error: 'Failed to save project' });
+  }
+});
+
 
 // GET: Project metadata (data.json)
 router.get('/api/projects/:id/meta', (req, res) => {
