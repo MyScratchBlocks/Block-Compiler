@@ -141,12 +141,42 @@ router.post('/:id/save', upload.single('project'), (req, res) => {
   const destPath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
 
   try {
-    fs.copyFileSync(sb3Blob.path, destPath);
+    const existingZip = new AdmZip(destPath);
+    const dataJsonEntry = existingZip.getEntry('data.json');
+
+    if (!dataJsonEntry) {
+      return res.status(500).json({ error: 'Original project missing data.json' });
+    }
+
+    const dataJsonBuffer = dataJsonEntry.getData();
+
+    // Read uploaded sb3
+    const uploadedZip = new AdmZip(sb3Blob.path);
+    const uploadedEntries = uploadedZip.getEntries();
+
+    // Create new zip with data.json preserved
+    const newZip = new AdmZip();
+    newZip.addFile('data.json', dataJsonBuffer);
+
+    uploadedEntries.forEach(entry => {
+      const name = entry.entryName;
+      if (
+        name === 'project.json' ||
+        /\.(png|svg|wav|mp3)$/.test(name)
+      ) {
+        newZip.addFile(name, entry.getData());
+      }
+    });
+
+    // Write new zip to the original location
+    newZip.writeZip(destPath);
+
+    // Clean up temp file
     fs.unlinkSync(sb3Blob.path);
 
-    res.json({ message: 'Project saved successfully', id });
+    res.json({ message: 'Project updated with new assets and project.json', id });
   } catch (err) {
-    console.error('Save error:', err.message);
+    console.error('Error saving project:', err.message);
     res.status(500).json({ error: 'Failed to save project' });
   }
 });
