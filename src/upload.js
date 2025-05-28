@@ -112,10 +112,8 @@ router.post('/', upload.single('project'), async (req, res) => {
     for (const entry of assetEntries) {
       const assetBuffer = entry.getData();
       const assetPath = path.join(LOCAL_ASSET_PATH, entry.entryName);
-
       const dir = path.dirname(assetPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
       fs.writeFileSync(assetPath, assetBuffer);
     }
 
@@ -127,7 +125,7 @@ router.post('/', upload.single('project'), async (req, res) => {
     fs.unlinkSync(modifiedSb3Path);
 
     res.json({
-      message: 'Project uploaded successfully with embedded metadata and extracted assets',
+      message: 'Project uploaded successfully',
       sb3File: localFileName,
       projectData: dataJson,
       id: fileNum
@@ -151,7 +149,7 @@ router.get('/api/projects/:id/meta', (req, res) => {
   const dataJsonText = zip.readAsText('data.json');
 
   if (!dataJsonText) {
-    return res.status(404).json({ error: 'data.json not found in the project file.' });
+    return res.status(404).json({ error: 'data.json not found' });
   }
 
   res.json(JSON.parse(dataJsonText));
@@ -170,24 +168,46 @@ router.get('/json/:id', (req, res) => {
   const projectJsonText = zip.readAsText('project.json');
 
   if (!projectJsonText) {
-    return res.status(404).json({ error: 'project.json not found in the project file.' });
+    return res.status(404).json({ error: 'project.json not found' });
   }
 
   res.json(JSON.parse(projectJsonText));
 });
 
-// GET: Serve asset locally
+// GET: Serve asset
 router.get('/assets/:asset_name', (req, res) => {
-  const { asset_name } = req.params;
-  const assetId = `${asset_name}`;
-  const assetPath = path.join(LOCAL_ASSET_PATH, assetId);
-
+  const assetPath = path.join(LOCAL_ASSET_PATH, req.params.asset_name);
   if (!fs.existsSync(assetPath)) {
     return res.status(404).json({ error: 'Asset not found' });
   }
-
-  res.setHeader('Content-Type', getMimeType(assetId));
+  res.setHeader('Content-Type', getMimeType(req.params.asset_name));
   res.sendFile(assetPath);
+});
+
+// PATCH: Increment view/like/favorite in data.json
+router.patch('/api/projects/:id/:action(view|love|favorite)', (req, res) => {
+  const { id, action } = req.params;
+  const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  try {
+    const zip = new AdmZip(filePath);
+    const dataJson = JSON.parse(zip.readAsText('data.json'));
+
+    const statKey = action === 'view' ? 'views' : action === 'love' ? 'loves' : 'favorites';
+    if (!dataJson.stats) dataJson.stats = {};
+    dataJson.stats[statKey] = (dataJson.stats[statKey] || 0) + 1;
+
+    zip.updateFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
+    zip.writeZip(filePath);
+
+    res.json({ message: `${statKey} incremented`, stats: dataJson.stats });
+  } catch (error) {
+    console.error('Error updating data.json:', error.message);
+    res.status(500).json({ error: 'Failed to update data.json' });
+  }
 });
 
 module.exports = router;
