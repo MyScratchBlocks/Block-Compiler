@@ -184,8 +184,8 @@ router.get('/assets/:asset_name', (req, res) => {
   res.sendFile(assetPath);
 });
 
-// PATCH: Increment view/like/favorite in data.json
-router.patch('/api/projects/:id/:action', (req, res) => {
+// POST: Increment view/like/favorite in data.json
+router.post('/api/projects/:id/:action', (req, res) => {
   const { id, action } = req.params;
   const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
   if (!fs.existsSync(filePath)) {
