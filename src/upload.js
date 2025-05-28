@@ -161,15 +161,21 @@ router.get('/api/projects/:id/meta', (req, res) => {
     return res.status(404).json({ error: 'Project not found' });
   }
 
-  const zip = new AdmZip(localFilePath);
-  const dataJsonText = zip.readAsText('data.json');
+  try {
+    const zip = new AdmZip(localFilePath);
+    const entry = zip.getEntry('data.json');
+    if (!entry) {
+      return res.status(404).json({ error: 'data.json not found in project file' });
+    }
 
-  if (!dataJsonText) {
-    return res.status(404).json({ error: 'data.json not found' });
+    const dataJsonText = entry.getData().toString('utf8');
+    res.json(JSON.parse(dataJsonText));
+  } catch (err) {
+    console.error('Error reading data.json:', err.message);
+    res.status(500).json({ error: 'Failed to read project metadata' });
   }
-
-  res.json(JSON.parse(dataJsonText));
 });
+
 
 // GET: project.json
 router.get('/json/:id', (req, res) => {
