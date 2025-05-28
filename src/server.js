@@ -17,7 +17,7 @@ app.use(express.json());
 app.use(projectsRoute);
 app.use(uploadRoute);
 app.use(clientRoute);
-app.use('/api/comments', commentsRouter);
+app.use('/api/projects', commentsRouter);
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
