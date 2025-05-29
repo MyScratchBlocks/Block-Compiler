@@ -64,7 +64,7 @@ router.post('/:projectId/comments', (req, res) => {
     projectId,
     text,
     createdAt: new Date().toISOString(),
-    user: { username: req.user?.username || 'Anonymous' },
+    user: req.body.username,
     replies: []
   };
 
