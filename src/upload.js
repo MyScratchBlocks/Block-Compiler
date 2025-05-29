@@ -129,10 +129,11 @@ router.post('/', async (req, res) => {
   }
 });
 
-// POST: Save SB3 blob to existing project
+// POST: Save SB3 blob to existing project and update title from req.body.projectName
 router.post('/:id/save', upload.single('project'), (req, res) => {
   const { id } = req.params;
   const sb3Blob = req.file;
+  const { projectName } = req.body;
 
   if (!sb3Blob) {
     return res.status(400).json({ error: 'No project file provided' });
@@ -149,14 +150,20 @@ router.post('/:id/save', upload.single('project'), (req, res) => {
     }
 
     const dataJsonBuffer = dataJsonEntry.getData();
+    const dataJson = JSON.parse(dataJsonBuffer.toString());
+
+    // Update the project title if projectName is provided
+    if (projectName && typeof projectName === 'string') {
+      dataJson.title = projectName;
+    }
 
     // Read uploaded sb3
     const uploadedZip = new AdmZip(sb3Blob.path);
     const uploadedEntries = uploadedZip.getEntries();
 
-    // Create new zip with data.json preserved
+    // Create new zip with updated data.json
     const newZip = new AdmZip();
-    newZip.addFile('data.json', dataJsonBuffer);
+    newZip.addFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
 
     uploadedEntries.forEach(entry => {
       const name = entry.entryName;
@@ -174,7 +181,7 @@ router.post('/:id/save', upload.single('project'), (req, res) => {
     // Clean up temp file
     fs.unlinkSync(sb3Blob.path);
 
-    res.json({ message: 'Project updated with new assets and project.json', id });
+    res.json({ message: 'Project updated', id, updatedTitle: dataJson.title });
   } catch (err) {
     console.error('Error saving project:', err.message);
     res.status(500).json({ error: 'Failed to save project' });
