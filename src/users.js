@@ -48,7 +48,7 @@ router.get('/users/:username', async (req, res) => {
             ? `/assets/internalapi/asset/${data.image.split('/')[1]}` 
             : data.image || '',
           author: data.author.username,
-          link: `/projects/${data.id}`
+          link: `/projects#${data.id}`
         });
       }
     } catch {
@@ -88,7 +88,7 @@ router.get('/users/:username', async (req, res) => {
               <img src="${proj.image}" alt="${proj.title} thumbnail" class="w-full h-40 object-cover rounded-md mb-4" />
               <h3 class="text-xl font-semibold text-gray-700 mb-2">${proj.title}</h3>
               <p class="text-gray-600 text-sm mb-4">Author: ${proj.author}</p>
-              <a href="${proj.link}" class="text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center">
+              <a href="https://myscratchblocks.github.io${proj.link}" class="text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center">
                 View Project
                 <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
