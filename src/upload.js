@@ -63,6 +63,9 @@ router.post('/', async (req, res) => {
     const localFilePath = path.join(LOCAL_UPLOAD_PATH, localFileName);
     const username = req.body.username;
 
+    if(username.includes("MyScratchBlocks")) {
+      return res.status(500).json({ error: "Invalid User" });
+     } 
     const token = `${Date.now()}_${uuidv4().replace(/-/g, '')}`;
 
     const dataJson = {
