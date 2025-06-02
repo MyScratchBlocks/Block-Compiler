@@ -262,32 +262,24 @@ router.post('/api/projects/:id/:action', (req, res, next) => {
     return res.status(404).json({ error: 'Project not found' });
   }
 
-  if (action === 'view') {
-    // Use the viewLimiter middleware for "view" actions
-    return viewLimiter(req, res, () => next());
-  } else if (action === 'love' || action === 'favourite') {
-    // Check if IP has already performed this action on this project
+  if (action === 'love' || action === 'favourite') {
     const ip = req.ip;
-    const map = oneTimeActions[action === 'love' ? 'love' : 'favourite'];
+    const map = oneTimeActions[action];
 
     if (!map.has(id)) {
       map.set(id, new Set());
     }
 
     if (map.get(id).has(ip)) {
-      return res.status(429).json({ error: `You have already ${action === 'love' ? 'liked' : 'favourited'} this project` });
+      return res.status(429).json({ error: `You have already ${action}d this project` });
     }
 
-    // Mark that IP has done this action
     map.get(id).add(ip);
-
-    // Proceed to next middleware to update the data.json
     return next();
   } else {
     return res.status(400).json({ error: 'Invalid action' });
   }
 }, (req, res) => {
-  // Actual incrementing handler after rate limiting or checks
   const { id, action } = req.params;
   const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
 
@@ -295,13 +287,7 @@ router.post('/api/projects/:id/:action', (req, res, next) => {
     const zip = new AdmZip(filePath);
     const dataJson = JSON.parse(zip.readAsText('data.json'));
 
-    let statKey;
-    if (action === 'view') statKey = 'views';
-    else if (action === 'love') statKey = 'loves';
-    else if (action === 'favourite') statKey = 'favorites';
-    else return res.status(400).json({ error: 'Invalid action' });
-
-    if (!dataJson.stats) dataJson.stats = {};
+    const statKey = action === 'love' ? 'loves' : 'favorites';
     dataJson.stats[statKey] = (dataJson.stats[statKey] || 0) + 1;
 
     zip.updateFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
@@ -309,9 +295,35 @@ router.post('/api/projects/:id/:action', (req, res, next) => {
 
     res.json({ message: `${statKey} incremented`, stats: dataJson.stats });
   } catch (error) {
-    console.error('Error updating data.json:', error.message);
+    console.error('Error updating stats:', error.message);
     res.status(500).json({ error: 'Failed to update data.json' });
   }
 });
+
+// Handle view (with rate limiting)
+router.post('/api/projects/:id/view', viewLimiter, (req, res) => {
+  const { id } = req.params;
+  const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  try {
+    const zip = new AdmZip(filePath);
+    const dataJson = JSON.parse(zip.readAsText('data.json'));
+
+    dataJson.stats.views = (dataJson.stats.views || 0) + 1;
+
+    zip.updateFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
+    zip.writeZip(filePath);
+
+    res.json({ message: `views incremented`, stats: dataJson.stats });
+  } catch (error) {
+    console.error('Error updating view count:', error.message);
+    res.status(500).json({ error: 'Failed to update view count' });
+  }
+});
+
 
 module.exports = router;
