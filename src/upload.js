@@ -239,11 +239,17 @@ router.get('/json/:id', (req, res) => {
 // GET: Serve asset
 router.get('/assets/internalapi/asset/:asset_name', (req, res) => {
   const assetPath = path.join(LOCAL_ASSET_PATH, req.params.asset_name);
+
   if (!fs.existsSync(assetPath)) {
     return res.status(404).json({ error: 'Asset not found' });
   }
-  res.setHeader('Content-Type', getMimeType(req.params.asset_name));
-  res.sendFile(assetPath);
+
+  res.download(assetPath, req.params.asset_name, (err) => {
+    if (err) {
+      console.error('Download error:', err);
+      res.status(500).json({ error: 'Failed to download file' });
+    }
+  });
 });
 
 // POST: Increment view/like/favorite in data.json
