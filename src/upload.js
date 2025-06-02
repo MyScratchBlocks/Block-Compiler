@@ -35,27 +35,22 @@ function getNextFileNumber() {
   return files.length ? Math.max(...files) + 1 : 1;
 }
 
-// Rate limiter for "view": 1 per project per IP per day
+// View limiter: 1 per project per IP per day
 const viewLimiter = rateLimit({
-  windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  windowMs: 24 * 60 * 60 * 1000,
   max: 1,
-  keyGenerator: (req) => {
-    const projectId = req.params.id;
-    const ip = req.ip;
-    return `${projectId}_view_${ip}`;
-  },
+  keyGenerator: (req) => `${req.params.id}_view_${req.ip}`,
   message: { error: 'View limit reached for today' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// In-memory stores for "love" and "favourite" - to allow only one increment per project per IP ever
 const oneTimeActions = {
-  love: new Map(),       // Map of projectId -> Set of IPs that already liked
-  favourite: new Map()   // Map of projectId -> Set of IPs that already favourited
+  love: new Map(),
+  favourite: new Map()
 };
 
-// POST: Create a new empty project
+// Create new empty project
 router.post('/', async (req, res) => {
   try {
     const fileNum = getNextFileNumber();
@@ -63,9 +58,10 @@ router.post('/', async (req, res) => {
     const localFilePath = path.join(LOCAL_UPLOAD_PATH, localFileName);
     const username = req.body.username;
 
-    if(username.includes("MyScratchBlocks")) {
+    if (username.includes("MyScratchBlocks")) {
       return res.status(500).json({ error: "Invalid User" });
-     } 
+    }
+
     const token = `${Date.now()}_${uuidv4().replace(/-/g, '')}`;
 
     const dataJson = {
@@ -82,16 +78,7 @@ router.post('/', async (req, res) => {
         username: username,
         scratchteam: false,
         history: { joined: '1900-01-01T00:00:00.000Z' },
-        profile: {
-          id: null,
-          images: {
-            '90x90': '',
-            '60x60': '',
-            '55x55': '',
-            '50x50': '',
-            '32x32': ''
-          }
-        }
+        profile: { id: null, images: {} }
       },
       image: `local_assets/${fileNum}_480x360.png`,
       images: {},
@@ -106,17 +93,12 @@ router.post('/', async (req, res) => {
         favorites: 0,
         remixes: 0
       },
-      remix: {
-        parent: null,
-        root: null
-      },
+      remix: { parent: null, root: null },
       project_token: token
     };
 
-  
-    // Create empty sb3 project with just project.json and data.json
     const zip = new AdmZip();
-    zip.addFile('project.json', Buffer.from('{"targets":[{"isStage":true,"name":"Stage","variables":{"`jEk@4|i[#Fk?(8x)AV.-my variable":["my variable",0]},"lists":{},"broadcasts":{},"blocks":{},"comments":{},"currentCostume":0,"costumes":[{"name":"backdrop1","dataFormat":"svg","assetId":"cd21514d0531fdffb22204e0ec5ed84a","md5ext":"cd21514d0531fdffb22204e0ec5ed84a.svg","rotationCenterX":240,"rotationCenterY":180}],"sounds":[{"name":"pop","assetId":"83a9787d4cb6f3b7632b4ddfebf74367","dataFormat":"wav","format":"","rate":48000,"sampleCount":1123,"md5ext":"83a9787d4cb6f3b7632b4ddfebf74367.wav"}],"volume":100,"layerOrder":0,"tempo":60,"videoTransparency":50,"videoState":"on","textToSpeechLanguage":null}],"monitors":[],"extensions":[],"meta":{"semver":"3.0.0","vm":"11.1.0","agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"}}', 'utf-8'));
+    zip.addFile('project.json', Buffer.from('{"targets":[{"isStage":true,"name":"Stage","variables":{"`jEk@4|i[#Fk?(8x)AV.-my variable":["my variable",0]},"lists":{},"broadcasts":{},"blocks":{},"comments":{},"currentCostume":0,"costumes":[{"name":"backdrop1","dataFormat":"svg","assetId":"cd21514d0531fdffb22204e0ec5ed84a","md5ext":"cd21514d0531fdffb22204e0ec5ed84a.svg","rotationCenterX":240,"rotationCenterY":180}],"sounds":[{"name":"pop","assetId":"83a9787d4cb6f3b7632b4ddfebf74367","dataFormat":"wav","format":"","rate":48000,"sampleCount":1123,"md5ext":"83a9787d4cb6f3b7632b4ddfebf74367.wav"}],"volume":100,"layerOrder":0,"tempo":60,"videoTransparency":50,"videoState":"on","textToSpeechLanguage":null}],"monitors":[],"extensions":[],"meta":{"semver":"3.0.0","vm":"11.1.0","agent":"Mozilla/5.0"}}', 'utf-8'));
     zip.addFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
     zip.writeZip(localFilePath);
 
@@ -132,15 +114,13 @@ router.post('/', async (req, res) => {
   }
 });
 
-// POST: Save SB3 blob to existing project and update title from req.body.projectName
+// Save updated project
 router.post('/:id/save', upload.single('project'), (req, res) => {
   const { id } = req.params;
   const sb3Blob = req.file;
   const { projectName } = req.body;
 
-  if (!sb3Blob) {
-    return res.status(400).json({ error: 'No project file provided' });
-  }
+  if (!sb3Blob) return res.status(400).json({ error: 'No project file provided' });
 
   const destPath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
 
@@ -148,40 +128,27 @@ router.post('/:id/save', upload.single('project'), (req, res) => {
     const existingZip = new AdmZip(destPath);
     const dataJsonEntry = existingZip.getEntry('data.json');
 
-    if (!dataJsonEntry) {
-      return res.status(500).json({ error: 'Original project missing data.json' });
-    }
+    if (!dataJsonEntry) return res.status(500).json({ error: 'Original project missing data.json' });
 
-    const dataJsonBuffer = dataJsonEntry.getData();
-    const dataJson = JSON.parse(dataJsonBuffer.toString());
+    const dataJson = JSON.parse(dataJsonEntry.getData().toString());
 
-    // Update the project title if projectName is provided
     if (projectName && typeof projectName === 'string') {
       dataJson.title = projectName;
     }
 
-    // Read uploaded sb3
     const uploadedZip = new AdmZip(sb3Blob.path);
-    const uploadedEntries = uploadedZip.getEntries();
-
-    // Create new zip with updated data.json
     const newZip = new AdmZip();
+
     newZip.addFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
 
-    uploadedEntries.forEach(entry => {
+    uploadedZip.getEntries().forEach(entry => {
       const name = entry.entryName;
-      if (
-        name === 'project.json' ||
-        /\.(png|svg|wav|mp3)$/.test(name)
-      ) {
+      if (name === 'project.json' || /\.(png|svg|wav|mp3)$/.test(name)) {
         newZip.addFile(name, entry.getData());
       }
     });
 
-    // Write new zip to the original location
     newZip.writeZip(destPath);
-
-    // Clean up temp file
     fs.unlinkSync(sb3Blob.path);
 
     res.json({ message: 'Project updated', id, updatedTitle: dataJson.title });
@@ -191,8 +158,7 @@ router.post('/:id/save', upload.single('project'), (req, res) => {
   }
 });
 
-
-// GET: Project metadata (data.json)
+// Project metadata
 router.get('/api/projects/:id/meta', (req, res) => {
   const projectId = req.params.id;
   const localFilePath = path.join(LOCAL_UPLOAD_PATH, `${projectId}.sb3`);
@@ -204,84 +170,69 @@ router.get('/api/projects/:id/meta', (req, res) => {
   try {
     const zip = new AdmZip(localFilePath);
     const entry = zip.getEntry('data.json');
-    if (!entry) {
-      return res.status(404).json({ error: 'data.json not found in project file' });
-    }
+    if (!entry) return res.status(404).json({ error: 'data.json not found' });
 
-    const dataJsonText = entry.getData().toString('utf8');
-    res.json(JSON.parse(dataJsonText));
+    res.json(JSON.parse(entry.getData().toString('utf8')));
   } catch (err) {
     console.error('Error reading data.json:', err.message);
     res.status(500).json({ error: 'Failed to read project metadata' });
   }
 });
 
-
-// GET: project.json
+// Serve project.json
 router.get('/json/:id', (req, res) => {
   const projectId = req.params.id;
   const localFilePath = path.join(LOCAL_UPLOAD_PATH, `${projectId}.sb3`);
 
-  if (!fs.existsSync(localFilePath)) {
-    return res.status(404).json({ error: 'Project not found' });
-  }
+  if (!fs.existsSync(localFilePath)) return res.status(404).json({ error: 'Project not found' });
 
   const zip = new AdmZip(localFilePath);
   const projectJsonText = zip.readAsText('project.json');
-
-  if (!projectJsonText) {
-    return res.status(404).json({ error: 'project.json not found' });
-  }
+  if (!projectJsonText) return res.status(404).json({ error: 'project.json not found' });
 
   res.json(JSON.parse(projectJsonText));
 });
 
-// GET: Serve asset
+// ✅ Serve assets as downloadable files
 router.get('/assets/internalapi/asset/:asset_name', (req, res) => {
-  const assetPath = path.join(LOCAL_ASSET_PATH, req.params.asset_name);
+  const assetName = req.params.asset_name;
+  const assetPath = path.join(LOCAL_ASSET_PATH, assetName);
+
   if (!fs.existsSync(assetPath)) {
     return res.status(404).json({ error: 'Asset not found' });
   }
-  res.setHeader('Content-Type', getMimeType(req.params.asset_name));
+
+  res.setHeader('Content-Type', getMimeType(assetName));
+  res.setHeader('Content-Disposition', `attachment; filename="${assetName}"`);
   res.sendFile(assetPath);
 });
 
-// POST: Increment view/like/favorite in data.json
-// Use rate limiter for views, manual check for love/favourite
+// Increment view/love/favourite
 router.post('/api/projects/:id/:action', (req, res, next) => {
   const { id, action } = req.params;
   const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
 
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ error: 'Project not found' });
-  }
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Project not found' });
 
   if (action === 'view') {
-    // Use the viewLimiter middleware for "view" actions
     return viewLimiter(req, res, () => next());
-  } else if (action === 'love' || action === 'favourite') {
-    // Check if IP has already performed this action on this project
+  }
+
+  if (action === 'love' || action === 'favourite') {
     const ip = req.ip;
-    const map = oneTimeActions[action === 'love' ? 'love' : 'favourite'];
+    const map = oneTimeActions[action];
 
-    if (!map.has(id)) {
-      map.set(id, new Set());
-    }
-
+    if (!map.has(id)) map.set(id, new Set());
     if (map.get(id).has(ip)) {
       return res.status(429).json({ error: `You have already ${action === 'love' ? 'liked' : 'favourited'} this project` });
     }
 
-    // Mark that IP has done this action
     map.get(id).add(ip);
-
-    // Proceed to next middleware to update the data.json
     return next();
-  } else {
-    return res.status(400).json({ error: 'Invalid action' });
   }
+
+  return res.status(400).json({ error: 'Invalid action' });
 }, (req, res) => {
-  // Actual incrementing handler after rate limiting or checks
   const { id, action } = req.params;
   const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
 
@@ -289,13 +240,7 @@ router.post('/api/projects/:id/:action', (req, res, next) => {
     const zip = new AdmZip(filePath);
     const dataJson = JSON.parse(zip.readAsText('data.json'));
 
-    let statKey;
-    if (action === 'view') statKey = 'views';
-    else if (action === 'love') statKey = 'loves';
-    else if (action === 'favourite') statKey = 'favorites';
-    else return res.status(400).json({ error: 'Invalid action' });
-
-    if (!dataJson.stats) dataJson.stats = {};
+    const statKey = action === 'view' ? 'views' : action === 'love' ? 'loves' : 'favorites';
     dataJson.stats[statKey] = (dataJson.stats[statKey] || 0) + 1;
 
     zip.updateFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
@@ -306,6 +251,32 @@ router.post('/api/projects/:id/:action', (req, res, next) => {
     console.error('Error updating data.json:', error.message);
     res.status(500).json({ error: 'Failed to update data.json' });
   }
+});
+
+router.get('/assets/internalapi/asset/:asset_name', (req, res) => {
+  const assetName = req.params.asset_name;
+  const assetPath = path.join(LOCAL_ASSET_PATH, assetName);
+
+  if (!fs.existsSync(assetPath)) {
+    return res.status(404).json({ error: 'Asset not found' });
+  }
+
+  res.setHeader('Content-Type', getMimeType(assetName));
+  res.setHeader('Content-Disposition', `attachment; filename="${assetName}"`);
+  res.sendFile(assetPath);
+});
+
+router.get('/json/:id', (req, res) => {
+  const projectId = req.params.id;
+  const localFilePath = path.join(LOCAL_UPLOAD_PATH, `${projectId}.sb3`);
+
+  if (!fs.existsSync(localFilePath)) return res.status(404).json({ error: 'Project not found' });
+
+  const zip = new AdmZip(localFilePath);
+  const projectJsonText = zip.readAsText('project.json');
+  if (!projectJsonText) return res.status(404).json({ error: 'project.json not found' });
+
+  res.json(JSON.parse(projectJsonText));
 });
 
 module.exports = router;
