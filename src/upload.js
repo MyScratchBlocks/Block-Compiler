@@ -155,33 +155,45 @@ router.post('/:id/save', upload.single('project'), (req, res) => {
     const dataJsonBuffer = dataJsonEntry.getData();
     const dataJson = JSON.parse(dataJsonBuffer.toString());
 
-    // Update the project title if projectName is provided
+    // Update the project title if provided
     if (projectName && typeof projectName === 'string') {
       dataJson.title = projectName;
     }
 
-    // Read uploaded sb3
     const uploadedZip = new AdmZip(sb3Blob.path);
     const uploadedEntries = uploadedZip.getEntries();
 
-    // Create new zip with updated data.json
     const newZip = new AdmZip();
     newZip.addFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
 
     uploadedEntries.forEach(entry => {
       const name = entry.entryName;
+
+      // Save valid project files into the zip
       if (
         name === 'project.json' ||
         /\.(png|svg|wav|mp3)$/.test(name)
       ) {
         newZip.addFile(name, entry.getData());
       }
+
+      // Handle asset saving
+      if (/\.(png|svg|wav|mp3)$/.test(name)) {
+        const assetPath = path.join(LOCAL_ASSET_PATH, name);
+
+        // Overwrite existing asset if exists
+        if (fs.existsSync(assetPath)) {
+          fs.unlinkSync(assetPath);
+        }
+
+        fs.writeFileSync(assetPath, entry.getData());
+      }
     });
 
-    // Write new zip to the original location
+    // Write updated zip to project file
     newZip.writeZip(destPath);
 
-    // Clean up temp file
+    // Clean up uploaded file
     fs.unlinkSync(sb3Blob.path);
 
     res.json({ message: 'Project updated', id, updatedTitle: dataJson.title });
