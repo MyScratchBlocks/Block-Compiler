@@ -249,12 +249,19 @@ router.get('/json/:id', (req, res) => {
 });
 
 // GET: Serve asset
-router.get('/assets/internalapi/asset/:asset_name', (req, res) => {
-  const assetPath = path.join(LOCAL_ASSET_PATH, req.params.asset_name);
+// GET: Serve asset like assets.scratch.mit.edu
+router.get('/assets/:md5ext', (req, res) => {
+  const { md5ext } = req.params;
+  const assetPath = path.join(LOCAL_ASSET_PATH, md5ext);
 
   if (!fs.existsSync(assetPath)) {
     return res.status(404).json({ error: 'Asset not found' });
   }
+
+  const mimeType = getMimeType(md5ext);
+  res.setHeader('Content-Type', mimeType);
+  fs.createReadStream(assetPath).pipe(res);
+});
 
   res.download(assetPath, req.params.asset_name, (err) => {
     if (err) {
