@@ -210,7 +210,7 @@ router.get('/json/:id', (req, res) => {
 });
 
 // GET: Serve asset
-router.get('/assets/:md5ext', (req, res) => {
+router.get('/assets/internalapi/asset/:md5ext', (req, res) => {
   const assetPath = path.join(LOCAL_ASSET_PATH, req.params.md5ext);
   if (!fs.existsSync(assetPath)) return res.status(404).json({ error: 'Asset not found' });
 
