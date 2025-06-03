@@ -263,7 +263,7 @@ router.get('/assets/:md5ext', (req, res) => {
   fs.createReadStream(assetPath).pipe(res);
 });
 
-  res.download(assetPath, req.params.asset_name, (err) => {
+  res.download(assetPath, req.params.md5ext, (err) => {
     if (err) {
       console.error('Download error:', err);
       res.status(500).json({ error: 'Failed to download file' });
