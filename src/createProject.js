@@ -23,7 +23,7 @@ router.post('/', async (req, res) => {
     const localFilePath = path.join(LOCAL_UPLOAD_PATH, `${fileNum}.sb3`);
     const username = req.body.username;
 
-    if (typeof username !== 'string' || username.includes("MyScratchBlocks")) {
+    if (typeof username !== 'string' || username.includes("MyScratchBlocks-")) {
       return res.status(400).json({ error: "Invalid username" });
     }
 
