@@ -136,7 +136,7 @@ router.get('/api/users/:username', async (req, res) => {
 
         // Accumulate stats - adjust keys if your structure is different
         totalViews += data.stats?.views || 0;
-        totalLikes += data.stats?.likes || 0;
+        totalLikes += data.stats?.loves || 0;
         totalFavorites += data.stats?.favorites || 0;
       }
     } catch (err) {
