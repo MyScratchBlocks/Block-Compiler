@@ -6,14 +6,20 @@ const dotenv = require('dotenv');
 const projectsRoute = require('./projects');
 const commentsRouter = require('./comments');
 const usersRouter = require('./users');
-const index = require('./index');
 
 dotenv.config();
 const app = express();
 app.use(cors())
-const PORT = process.env.PORT || 3000;
-
 app.use(express.json());
+
+app.use('/', require('./createProject'));
+app.use('/', require('./saveProject'));
+app.use('/', require('./metadata'));
+app.use('/', require('./projectJson'));
+app.use('/', require('./serveAsset'));
+app.use('/', require('./projectStats'));
+
+const PORT = process.env.PORT || 3000;
 
 app.use(projectsRoute);
 app.use('/api/projects', commentsRouter);
