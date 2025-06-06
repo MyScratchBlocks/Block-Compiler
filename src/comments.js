@@ -64,7 +64,7 @@ router.post('/:projectId/comments', (req, res) => {
     projectId,
     text,
     createdAt: new Date().toISOString(),
-    user: req.body.username,
+    user: req.body.user?.username,
     replies: []
   };
 
@@ -94,7 +94,7 @@ router.post('/:projectId/comments/:commentId/reply', (req, res) => {
           id: uuidv4(),
           text,
           createdAt: new Date().toISOString(),
-          user: { username: req.user?.username || 'Anonymous' }
+          user: { username: req.body.user?.username || 'Anonymous' }
         });
         return true;
       }
