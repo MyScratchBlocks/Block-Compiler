@@ -2,9 +2,9 @@
   "name": "forkphorus-cloud-server",
   "version": "0.1.0",
   "description": "",
-  "main": "src/index.js",
+  "main": "src/cloud-server/index.js",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node src/cloud-server/index.js",
     "test": "jest",
     "check": "tsc"
   },
