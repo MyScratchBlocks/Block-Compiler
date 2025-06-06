@@ -24,7 +24,6 @@ const PORT = process.env.PORT || 3000;
 app.use(projectsRoute);
 app.use('/api/projects', commentsRouter);
 app.use(usersRouter);
-app.use(index);
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
