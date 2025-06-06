@@ -17,10 +17,9 @@ function getMimeType(filename) {
   return types[ext] || 'application/octet-stream';
 }
 
-router.get('/assets/internalapi/asset/:md5ext', (req, res) => {
+function serveAssetAsDownload(req, res) {
   const filename = req.params.md5ext;
 
-  // Prevent directory traversal attacks
   if (filename.includes('..') || path.isAbsolute(filename)) {
     return res.status(400).json({ error: 'Invalid filename' });
   }
@@ -31,7 +30,7 @@ router.get('/assets/internalapi/asset/:md5ext', (req, res) => {
   }
 
   res.setHeader('Content-Type', getMimeType(filename));
-  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
   const stream = fs.createReadStream(assetPath);
   stream.on('error', err => {
@@ -40,6 +39,10 @@ router.get('/assets/internalapi/asset/:md5ext', (req, res) => {
   });
 
   stream.pipe(res);
-});
+}
+
+// Both endpoints serve as downloads
+router.get('/assets/internalapi/asset/:md5ext', serveAssetAsDownload);
+router.get('/assets/internalapi/asset/:md5ext/get', serveAssetAsDownload);
 
 module.exports = router;
