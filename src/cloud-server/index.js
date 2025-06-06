@@ -3,9 +3,9 @@ const fs = require('fs');
 const finalhandler = require('finalhandler');
 const serveStatic = require('serve-static');
 
-const logger = require('./logger');
-const config = require('./config');
-const wss = require('./server');
+const logger = require('./cloud-server/logger');
+const config = require('./cloud-server/config');
+const wss = require('./cloud-server/server');
 
 // We serve static files over HTTP
 const serve = serveStatic('public');
