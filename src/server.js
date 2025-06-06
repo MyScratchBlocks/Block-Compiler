@@ -25,6 +25,10 @@ app.use(projectsRoute);
 app.use('/api/projects', commentsRouter);
 app.use(usersRouter);
 
+app.get('/', (req, res) => {
+    res.send('MyScratchBlocks Compiler is running');
+});
+
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
