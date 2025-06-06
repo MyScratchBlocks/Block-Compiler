@@ -101,4 +101,57 @@ router.get('/users/:username', async (req, res) => {
   `);
 });
 
+router.get('/api/users/:username', async (req, res) => {
+  const username = req.params.username;
+
+  let projectFiles;
+  try {
+    projectFiles = fs.readdirSync(LOCAL_UPLOAD_PATH).filter(f => f.endsWith('.sb3'));
+  } catch (err) {
+    console.error('Failed to read projects folder:', err);
+    return res.status(500).json({ error: 'Failed to read projects folder.' });
+  }
+
+  let totalViews = 0;
+  let totalLikes = 0;
+  let totalFavorites = 0;
+  const userProjects = [];
+
+  for (const file of projectFiles) {
+    const filePath = path.join(LOCAL_UPLOAD_PATH, file);
+    try {
+      const zip = new AdmZip(filePath);
+      const dataEntry = zip.getEntry('data.json');
+      if (!dataEntry) continue;
+
+      const dataJsonText = dataEntry.getData().toString('utf8');
+      const data = safeJsonParse(dataJsonText);
+      if (!data) continue;
+
+      if (data.author?.username === username) {
+        userProjects.push({
+          id: data.id,
+          title: data.title || `Project ${data.id}`,
+        });
+
+        // Accumulate stats - adjust keys if your structure is different
+        totalViews += data.stats?.views || 0;
+        totalLikes += data.stats?.likes || 0;
+        totalFavorites += data.stats?.favorites || 0;
+      }
+    } catch (err) {
+      console.warn(`Skipping corrupted project file ${file}:`, err.message);
+      continue;
+    }
+  }
+
+  res.json({
+    username,
+    totalProjects: userProjects.length,
+    totalViews,
+    totalLikes,
+    totalFavorites,
+  });
+});
+
 module.exports = router;
