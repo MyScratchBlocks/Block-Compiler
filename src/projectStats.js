@@ -82,7 +82,7 @@ router.post('/api/projects/:id/:action', (req, res, next) => {
 });
 
 // Handle views
-router.post('/api/projects/:id/view', viewLimiter, (req, res) => {
+router.post('/api/projects/:id/views', viewLimiter, (req, res) => {
   const { id } = req.params;
 
   if (!validateId(id)) {
