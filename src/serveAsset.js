@@ -6,28 +6,40 @@ const router = express.Router();
 const LOCAL_ASSET_PATH = path.join(__dirname, '..', 'local_storage/assets');
 
 function getMimeType(filename) {
-  const ext = filename.split('.').pop().toLowerCase();
-  const types = {
-    png: 'image/png',
-    svg: 'image/svg+xml',
-    wav: 'audio/wav',
-    mp3: 'audio/mpeg',
-    json: 'application/json'
-  };
-  return types[ext] || 'application/octet-stream';
+  const ext = filename.split('.').pop().toLowerCase();
+  const types = {
+    png: 'image/png',
+    svg: 'image/svg+xml',
+    wav: 'audio/wav',
+    mp3: 'audio/mpeg',
+    json: 'application/json'
+  };
+  return types[ext] || 'application/octet-stream';
 }
 
 router.get('/assets/internalapi/asset/:md5ext', (req, res) => {
-  const assetPath = path.join(LOCAL_ASSET_PATH, req.params.md5ext);
-  if (!fs.existsSync(assetPath)) {
-    return res.status(404).json({ error: 'Asset not found' });
-  }
+  const filename = req.params.md5ext;
 
-  const filename = req.params.md5ext;
-  res.setHeader('Content-Type', getMimeType(filename));
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  // Prevent directory traversal attacks
+  if (filename.includes('..') || path.isAbsolute(filename)) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
 
-  fs.createReadStream(assetPath).pipe(res);
+  const assetPath = path.join(LOCAL_ASSET_PATH, filename);
+  if (!fs.existsSync(assetPath)) {
+    return res.status(404).json({ error: 'Asset not found' });
+  }
+
+  res.setHeader('Content-Type', getMimeType(filename));
+  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+
+  const stream = fs.createReadStream(assetPath);
+  stream.on('error', err => {
+    console.error('Stream error:', err.message);
+    res.status(500).end();
+  });
+
+  stream.pipe(res);
 });
 
 module.exports = router;
