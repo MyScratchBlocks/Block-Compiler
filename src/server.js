@@ -20,7 +20,11 @@ dotenv.config();
 
 // Initialize Express
 const app = express();
-app.use(cors());
+
+app.use(cors({
+  origin: 'https://myscratchblocks.github.io'
+}));
+
 app.use(express.json());
 
 // Load modular routes
