@@ -24,7 +24,7 @@ module.exports = {
   // This can significantly improve performance
   bufferSends: 60,
 
-  enableRename: false,
+  enableRename: true,
 
   enableDelete: false,
 
