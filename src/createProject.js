@@ -31,7 +31,7 @@ router.post('/', async (req, res) => {
 
     const dataJson = {
       id: fileNum,
-      title: 'Untitled',
+      title: 'Untitled Project',
       description: '',
       instructions: '',
       visibility: 'visible',
