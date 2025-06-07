@@ -80,12 +80,12 @@ router.get('/users/:username', async (req, res) => {
   <main class="grid sm:grid-cols-2 md:grid-cols-3 gap-6 max-w-7xl mx-auto">
     ${
       userProjects.length === 0 
-        ? `<p class="col-span-full text-center text-gray-600">No projects found for this user.</p>` 
+        ? `<p class="col-span-full text-center text-gray-600">Users must have at least 1 project for their Profile to be shown to the public.</p>` 
         : userProjects.map(proj => `
           <div class="bg-white p-6 rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300 transform hover:-translate-y-1">
             <img src="${proj.image}" alt="${proj.title} thumbnail" class="w-full h-40 object-cover rounded-md mb-4" />
             <h3 class="text-xl font-semibold text-gray-700 mb-2">${proj.title}</h3>
-            <p class="text-gray-600 text-sm mb-4">Author: ${proj.author}</p>
+            <p class="text-gray-600 text-sm mb-4">Main Coder: ${proj.author}</p>
             <a href="https://myscratchblocks.github.io${proj.link}" class="text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center" target="_blank" rel="noopener noreferrer">
               View Project
               <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
