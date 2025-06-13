@@ -69,7 +69,7 @@ function naughty(text) {
   const length = FILTERS.length;
   for (var i = 0; i < length; i++) {
     if (FILTERS[i].test(text)) {
-      return true;
+      return false;
     }
   }
 
