@@ -6,7 +6,7 @@ const AdmZip = require('adm-zip');
 const router = express.Router();
 
 const LOCAL_UPLOAD_DIR = path.join(__dirname, '..', 'local_storage/uploads');
-const THUMBNAIL_URL = 'https://codesnap-org.github.io/projects/static/assets/018f79360b10f9f2c317d648d61a0eb2.svg';
+const THUMBNAIL_URL = 'https://myscratchblocks.github.io/images/No%20Cover%20Available.png';
 
 // GET /api/projects
 router.get('/api/projects', async (req, res) => {
