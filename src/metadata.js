@@ -1,123 +1,94 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const AdmZip = require('adm-zip');
-const axios = require('axios');
 
 const router = express.Router();
+const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
 
-const GITHUB_TOKEN = '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';
-const OWNER = 'MyScratchBlocks';
-const REPO = 'Project-DB';
-const BRANCH = 'main'; // Change if needed
-
-const githubAPI = axios.create({
-  baseURL: 'https://api.github.com',
-  headers: {
-    Authorization: `token ${GITHUB_TOKEN}`,
-    'User-Agent': 'MyScratchBlocksApp'
-  }
-});
-
-// Helper to set nested JSON path value
+// Helper function to set nested value by path (like lodash.set)
 function setNestedValue(obj, path, value) {
   const keys = path.split('.');
   let current = obj;
   for (let i = 0; i < keys.length - 1; i++) {
-    if (!current[keys[i]] || typeof current[keys[i]] !== 'object') {
-      current[keys[i]] = {};
+    const key = keys[i];
+    if (!(key in current) || typeof current[key] !== 'object' || current[key] === null) {
+      current[key] = {};
     }
-    current = current[keys[i]];
+    current = current[key];
   }
   current[keys[keys.length - 1]] = value;
 }
 
-// GET project metadata
-router.get('/api/projects/:id/meta', async (req, res) => {
+// GET route - read metadata
+router.get('/api/projects/:id/meta', (req, res) => {
   const { id } = req.params;
+
   if (!/^\d+$/.test(id)) {
     return res.status(400).json({ error: 'Invalid project ID format' });
   }
 
-  try {
-    const { data: fileData } = await githubAPI.get(`/repos/${OWNER}/${REPO}/contents/projects/${id}.sb3`, {
-      params: { ref: BRANCH }
-    });
+  const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
 
-    const buffer = Buffer.from(fileData.content, 'base64');
-    const zip = new AdmZip(buffer);
+  try {
+    fs.accessSync(filePath, fs.constants.F_OK);
+
+    const zip = new AdmZip(filePath);
     const entry = zip.getEntry('data.json');
 
     if (!entry) {
       return res.status(404).json({ error: 'data.json not found in project file' });
     }
 
-    const metadata = JSON.parse(entry.getData().toString('utf-8'));
-    res.json(metadata);
+    const data = JSON.parse(entry.getData().toString('utf-8'));
+    res.json(data);
   } catch (err) {
-    console.error('GitHub read error:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Failed to read project metadata' });
+    console.error('Metadata read error:', err.stack || err.message);
+    return res.status(500).json({ error: 'Failed to read project metadata' });
   }
 });
 
-// PUT update project metadata
-router.put('/api/projects/:id/meta', async (req, res) => {
+// PUT route - edit metadata
+router.put('/api/projects/:id/meta', (req, res) => {
   const { id } = req.params;
   const updates = req.body;
+
   if (!/^\d+$/.test(id)) {
     return res.status(400).json({ error: 'Invalid project ID format' });
   }
 
+  const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
+
   try {
-    // Fetch file info
-    const { data: fileData } = await githubAPI.get(`/repos/${OWNER}/${REPO}/contents/projects/${id}.sb3`, {
-      params: { ref: BRANCH }
-    });
+    fs.accessSync(filePath, fs.constants.F_OK);
 
-    const originalSHA = fileData.sha;
-    const buffer = Buffer.from(fileData.content, 'base64');
-    const zip = new AdmZip(buffer);
-
+    const zip = new AdmZip(filePath);
     const entry = zip.getEntry('data.json');
+
     if (!entry) {
       return res.status(404).json({ error: 'data.json not found in project file' });
     }
 
-    let metadata;
+    let data;
     try {
-      metadata = JSON.parse(entry.getData().toString('utf-8'));
-    } catch (err) {
-      return res.status(500).json({ error: 'Invalid data.json content' });
+      data = JSON.parse(entry.getData().toString('utf-8'));
+    } catch (parseErr) {
+      return res.status(500).json({ error: 'Failed to parse existing project metadata' });
     }
 
-    // Apply updates
+    // Apply updates without lodash
     for (const key in updates) {
-      setNestedValue(metadata, key, updates[key]);
+      setNestedValue(data, key, updates[key]);
     }
 
     zip.deleteFile('data.json');
-    zip.addFile('data.json', Buffer.from(JSON.stringify(metadata, null, 2)));
-
-    const updatedBuffer = zip.toBuffer();
-    const encoded = updatedBuffer.toString('base64');
-
-    // Upload new file version to GitHub
-    await githubAPI.put(`/repos/${OWNER}/${REPO}/contents/projects/${id}.sb3`, {
-      message: `Update metadata for project ${id}`,
-      content: encoded,
-      sha: originalSHA,
-      committer: {
-        name: 'Project Bot',
-        email: 'bot@myscratchblocks.com'
-      },
-      author: {
-        name: 'Project Bot',
-        email: 'bot@myscratchblocks.com'
-      }
-    });
+    zip.addFile('data.json', Buffer.from(JSON.stringify(data, null, 2)));
+    zip.writeZip(filePath);
 
     res.json({ success: true, updated: updates });
   } catch (err) {
-    console.error('GitHub update error:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Failed to update project metadata' });
+    console.error('Metadata update error:', err.stack || err.message);
+    return res.status(500).json({ error: 'Failed to update project metadata' });
   }
 });
 
