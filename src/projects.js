@@ -31,9 +31,11 @@ router.get('/api/projects', async (req, res) => {
           continue;
         }
 
-        const data = JSON.parse(entry.getData().toString('utf8'));
-        if(!data.visibility === 'unshared') {
-          
+        const rawData = entry.getData().toString('utf8');
+        const data = JSON.parse(rawData);
+
+        // Include only projects that are not marked as "unshared"
+        if (data.visibility !== 'unshared') {
           projects.push({
             id: data.id || file.replace(/\.sb3$/, ''),
             name: data.title || 'Untitled',
@@ -41,7 +43,7 @@ router.get('/api/projects', async (req, res) => {
             author: data.author?.username || 'Unknown User',
             link: `https://myscratchblocks.github.io/projects#${data.id || file.replace(/\.sb3$/, '')}`
           });
-          
+        }
 
       } catch (err) {
         console.warn(`Skipping ${file} due to error:`, err.message);
