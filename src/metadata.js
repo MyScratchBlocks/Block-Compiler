@@ -21,8 +21,8 @@ function setNestedValue(obj, path, value) {
 }
 
 // GET route - read metadata
-router.get('/api/projects/:id/meta', (req, res) => {
-  const { id } = req.params;
+router.get('/api/projects/:id/meta/:username', (req, res) => {
+  const { id, username } = req.params;
 
   if (!/^\d+$/.test(id)) {
     return res.status(400).json({ error: 'Invalid project ID format' });
@@ -42,8 +42,6 @@ router.get('/api/projects/:id/meta', (req, res) => {
 
     const data = JSON.parse(entry.getData().toString('utf-8'));
     if(data.visibility === 'unshared') {
-      const username = req.headers['authorization']
-;
       if(username === data.author?.username) {
         res.json(data);
       } else {
