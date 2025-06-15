@@ -30,8 +30,8 @@ const commentsRouter = require('./comments');
 const usersRouter = require('./users');
 
 app.use('/api/projects', commentsRouter); // Comments
-app.use('/api/projects', projectsRoute);  // Projects
-app.use('/api/users', usersRouter);       // Users
+app.use(projectsRoute);  // Projects
+app.use(usersRouter);       // Users
 
 // Root health check
 app.get('/', (req, res) => {
