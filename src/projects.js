@@ -16,44 +16,50 @@ router.get('/api/projects', async (req, res) => {
     }
 
     const files = fs.readdirSync(LOCAL_UPLOAD_DIR);
-    const sb3Files = files.filter(file => file.endsWith('.sb3'));
+    const sb3Files = files.filter(file => file.toLowerCase().endsWith('.sb3'));
     const projects = [];
 
     for (const file of sb3Files) {
       const filePath = path.join(LOCAL_UPLOAD_DIR, file);
+      const projectId = file.replace(/\.sb3$/i, '');
 
       try {
         const zip = new AdmZip(filePath);
         const entry = zip.getEntry('data.json');
 
         if (!entry) {
-          console.warn(`Missing data.json in ${file}`);
+          console.warn(`[WARN] Missing data.json in ${file}`);
           continue;
         }
 
-        const rawData = entry.getData().toString('utf8');
-        const data = JSON.parse(rawData);
+        let data;
+        try {
+          const rawData = entry.getData().toString('utf8');
+          data = JSON.parse(rawData);
+        } catch (parseError) {
+          console.warn(`[WARN] Failed to parse data.json in ${file}: ${parseError.message}`);
+          continue;
+        }
 
-        // Include only projects that are not marked as "unshared"
         if (data.visibility !== 'unshared') {
           projects.push({
-            id: data.id || file.replace(/\.sb3$/, ''),
+            id: data.id || projectId,
             name: data.title || 'Untitled',
             image: THUMBNAIL_URL,
             author: data.author?.username || 'Unknown User',
-            link: `https://myscratchblocks.github.io/projects#${data.id || file.replace(/\.sb3$/, '')}`
+            link: `https://myscratchblocks.github.io/projects#${data.id || projectId}`
           });
         }
 
-      } catch (err) {
-        console.warn(`Skipping ${file} due to error:`, err.message);
+      } catch (zipError) {
+        console.warn(`[WARN] Skipping ${file} due to error: ${zipError.message}`);
         continue;
       }
     }
 
     res.json({ projects });
   } catch (error) {
-    console.error('Error fetching local projects:', error.message);
+    console.error('[ERROR] Failed to fetch local projects:', error.message);
     res.status(500).json({ error: 'Failed to fetch local projects' });
   }
 });
