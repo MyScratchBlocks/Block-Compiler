@@ -45,38 +45,6 @@ app.get('/', (req, res) => {
 });
 
 // Create HTTP server and serve static files from 'public'
-const serve = serveStatic('public');
-const server = http.createServer((req, res) => {
-  // Security headers
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Referrer-Policy', 'no-referrer');
-  res.setHeader('Permissions-Policy', 'interest-cohort=()');
-  serve(req, res, finalhandler(req, res)); // Static fallback
-});
-
-// WebSocket upgrade handling
-server.on('upgrade', (request, socket, head) => {
-  wss.handleUpgrade(request, socket, head, (ws) => {
-    wss.emit('connection', ws, request);
-  });
-});
-
-server.on('close', () => {
-  logger.info('Server closing');
-  wss.close();
-});
-
-// Listen on port (from .env or fallback config)
-const PORT = process.env.PORT || config.port || 3000;
-server.listen(PORT, () => {
-  if (typeof PORT === 'string' && PORT.startsWith('/') && config.unixSocketPermissions >= 0) {
-    fs.chmod(PORT, config.unixSocketPermissions, (err) => {
-      if (err) {
-        logger.error('Could not chmod unix socket: ' + err);
-        process.exit(1);
-      }
-    });
-  }
-  logger.info(`Server started on port: ${PORT}`);
+app.listen(5000, () => {
+  console.log("Server running");
 });
