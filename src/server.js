@@ -2,18 +2,6 @@ const express = require('express');
 const path = require('path');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const http = require('http');
-const fs = require('fs');
-const finalhandler = require('finalhandler');
-const serveStatic = require('serve-static');
-
-// App modules
-const projectsRoute = require('./projects');
-const commentsRouter = require('./comments');
-const usersRouter = require('./users');
-const logger = require('./cloud-server/logger');
-const config = require('./cloud-server/config');
-const wss = require('./cloud-server/server');
 
 // Load environment variables
 dotenv.config();
@@ -21,10 +9,12 @@ dotenv.config();
 // Initialize Express
 const app = express();
 
+// Enable CORS for specific origin
 app.use(cors({
   origin: 'https://myscratchblocks.github.io'
 }));
 
+// Middleware to parse JSON request bodies
 app.use(express.json());
 
 // Load modular routes
@@ -35,16 +25,21 @@ app.use('/', require('./projectJson'));
 app.use('/', require('./serveAsset'));
 app.use('/', require('./projectStats'));
 
+const projectsRoute = require('./projects');
+const commentsRouter = require('./comments');
+const usersRouter = require('./users');
+
 app.use('/api/projects', commentsRouter); // Comments
-app.use('/api/projects', projectsRoute);  // Projects - updated to same mount path for consistency
-app.use('/api/users', usersRouter);       // Users - namespaced under /api/users
+app.use('/api/projects', projectsRoute);  // Projects
+app.use('/api/users', usersRouter);       // Users
 
 // Root health check
 app.get('/', (req, res) => {
   res.send('MyScratchBlocks Compiler is running');
 });
 
-// Create HTTP server and serve static files from 'public'
-app.listen(5000, () => {
-  console.log("Server running");
+// Start the server using app.listen
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
