@@ -2,10 +2,23 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const AdmZip = require('adm-zip');
-const _ = require('lodash');
 
 const router = express.Router();
 const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
+
+// Helper function to set nested value by path (like lodash.set)
+function setNestedValue(obj, path, value) {
+  const keys = path.split('.');
+  let current = obj;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const key = keys[i];
+    if (!(key in current) || typeof current[key] !== 'object' || current[key] === null) {
+      current[key] = {};
+    }
+    current = current[key];
+  }
+  current[keys[keys.length - 1]] = value;
+}
 
 // GET route - read metadata
 router.get('/api/projects/:id/meta', (req, res) => {
@@ -56,17 +69,20 @@ router.put('/api/projects/:id/meta', (req, res) => {
       return res.status(404).json({ error: 'data.json not found in project file' });
     }
 
-    const data = JSON.parse(entry.getData().toString('utf-8'));
-
-    // Apply updates to the data object
-    for (const key in updates) {
-      _.set(data, key, updates[key]);
+    let data;
+    try {
+      data = JSON.parse(entry.getData().toString('utf-8'));
+    } catch (parseErr) {
+      return res.status(500).json({ error: 'Failed to parse existing project metadata' });
     }
 
-    // Replace data.json in zip
-    zip.updateFile('data.json', Buffer.from(JSON.stringify(data)));
+    // Apply updates without lodash
+    for (const key in updates) {
+      setNestedValue(data, key, updates[key]);
+    }
 
-    // Save the modified sb3
+    zip.deleteFile('data.json');
+    zip.addFile('data.json', Buffer.from(JSON.stringify(data, null, 2)));
     zip.writeZip(filePath);
 
     res.json({ success: true, updated: updates });
