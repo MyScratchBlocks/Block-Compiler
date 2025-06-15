@@ -35,8 +35,8 @@ router.get('/api/projects/:id/meta', (req, res) => {
   }
 });
 
-// POST route - edit metadata
-router.post('/api/projects/:id/meta', (req, res) => {
+// PUT route - edit metadata
+router.put('/api/projects/:id/meta', (req, res) => {
   const { id } = req.params;
   const updates = req.body;
 
