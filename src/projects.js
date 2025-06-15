@@ -32,14 +32,16 @@ router.get('/api/projects', async (req, res) => {
         }
 
         const data = JSON.parse(entry.getData().toString('utf8'));
-
-        projects.push({
-          id: data.id || file.replace(/\.sb3$/, ''),
-          name: data.title || 'Untitled',
-          image: THUMBNAIL_URL,
-          author: data.author?.username || 'Unknown User',
-          link: `https://myscratchblocks.github.io/projects#${data.id || file.replace(/\.sb3$/, '')}`
-        });
+        if(!data.visibility === 'unshared') {
+          
+          projects.push({
+            id: data.id || file.replace(/\.sb3$/, ''),
+            name: data.title || 'Untitled',
+            image: THUMBNAIL_URL,
+            author: data.author?.username || 'Unknown User',
+            link: `https://myscratchblocks.github.io/projects#${data.id || file.replace(/\.sb3$/, '')}`
+          });
+          
 
       } catch (err) {
         console.warn(`Skipping ${file} due to error:`, err.message);
