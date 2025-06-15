@@ -1,37 +1,45 @@
 const express = require('express');
 const AdmZip = require('adm-zip');
 const { v4: uuidv4 } = require('uuid');
-const { Octokit } = require('@octokit/rest');
+const axios = require('axios')
 
 const router = express.Router();
-const gh_token = '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';
-const octokit = new Octokit({ auth: gh_token });
 
+const GITHUB_TOKEN = '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';
 const OWNER = 'MyScratchBlocks';
 const REPO = 'Project-DB';
 
+const apiBase = 'https://api.github.com';
+
+const axiosGitHub = axios.create({
+  baseURL: apiBase,
+  headers: {
+    Authorization: `token ${GITHUB_TOKEN}`,
+    'User-Agent': 'MyScratchBlocksApp',
+    Accept: 'application/vnd.github.v3+json'
+  }
+});
+
+// Get next numeric project ID
 async function getNextProjectId() {
   try {
-    const { data } = await octokit.repos.getContent({
-      owner: OWNER,
-      repo: REPO,
-      path: 'projects',
-    });
+    const { data } = await axiosGitHub.get(`/repos/${OWNER}/${REPO}/contents/projects`);
 
-    const sb3Files = data.filter(file => file.name.endsWith('.sb3'));
+    const sb3Files = data.filter(f => f.name.endsWith('.sb3'));
     const ids = sb3Files.map(f => parseInt(f.name)).filter(n => !isNaN(n));
     return ids.length ? Math.max(...ids) + 1 : 1;
   } catch (err) {
-    if (err.status === 404) return 1; // Folder doesn't exist yet
+    if (err.response?.status === 404) return 1;
     throw err;
   }
 }
 
+// Route to create project
 router.post('/', async (req, res) => {
   try {
     const username = req.body.username;
-    if (typeof username !== 'string' || username.includes("MyScratchBlocks-")) {
-      return res.status(400).json({ error: "Invalid username" });
+    if (typeof username !== 'string' || username.includes('MyScratchBlocks-')) {
+      return res.status(400).json({ error: 'Invalid username' });
     }
 
     const fileNum = await getNextProjectId();
@@ -65,7 +73,7 @@ router.post('/', async (req, res) => {
       project_token: token
     };
 
-    // Create .sb3 ZIP buffer
+    // Create ZIP (.sb3)
     const zip = new AdmZip();
     zip.addFile('project.json', Buffer.from(JSON.stringify({
       targets: [{
@@ -112,21 +120,19 @@ router.post('/', async (req, res) => {
     zip.addFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
 
     const sb3Buffer = zip.toBuffer();
+    const base64Content = sb3Buffer.toString('base64');
 
-    // Upload .sb3 file to GitHub
-    await octokit.repos.createOrUpdateFileContents({
-      owner: OWNER,
-      repo: REPO,
-      path: `projects/${fileNum}.sb3`,
+    // Upload to GitHub using axios
+    await axiosGitHub.put(`/repos/${OWNER}/${REPO}/contents/projects/${fileNum}.sb3`, {
       message: `Add project ${fileNum}`,
-      content: sb3Buffer.toString('base64'),
+      content: base64Content,
       committer: {
-        name: "Project Bot",
-        email: "bot@myscratchblocks.com"
+        name: 'Project Bot',
+        email: 'bot@myscratchblocks.com'
       },
       author: {
-        name: "Project Bot",
-        email: "bot@myscratchblocks.com"
+        name: 'Project Bot',
+        email: 'bot@myscratchblocks.com'
       }
     });
 
@@ -137,7 +143,7 @@ router.post('/', async (req, res) => {
       projectData: dataJson
     });
   } catch (err) {
-    console.error('GitHub upload error:', err);
+    console.error('GitHub upload error:', err.response?.data || err.message);
     res.status(500).json({ error: 'Failed to upload project to GitHub' });
   }
 });
