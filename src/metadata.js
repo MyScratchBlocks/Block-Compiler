@@ -42,7 +42,8 @@ router.get('/api/projects/:id/meta', (req, res) => {
 
     const data = JSON.parse(entry.getData().toString('utf-8'));
     if(data.visibility === 'unshared') {
-      const username = req.headers.Authorization;
+      const username = req.headers['authorization']
+;
       if(username === data.author?.username) {
         res.json(data);
       } else {
