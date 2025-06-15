@@ -34,7 +34,7 @@ router.post('/', async (req, res) => {
       title: 'Untitled Project',
       description: '',
       instructions: '',
-      visibility: 'visible',
+      visibility: 'unshared',
       public: true,
       comments_allowed: true,
       is_published: true,
