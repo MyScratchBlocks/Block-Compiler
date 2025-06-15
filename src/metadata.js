@@ -41,6 +41,14 @@ router.get('/api/projects/:id/meta', (req, res) => {
     }
 
     const data = JSON.parse(entry.getData().toString('utf-8'));
+    if(data.visibility === 'unshared') {
+      const username = req.headers.Authorization;
+      if(username === data.author?.username) {
+        res.json(data);
+      } else {
+        res.status(403).json({ error: 'Unauthorized' });
+      }
+    }
     res.json(data);
   } catch (err) {
     console.error('Metadata read error:', err.stack || err.message);
