@@ -7,8 +7,9 @@ const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
 
+// Track one-time actions per IP per project
 const oneTimeActions = {
-  love: new Map(),
+  love: new Map(),        // Map<projectId, Map<ip, true>>
   favourite: new Map()
 };
 
@@ -57,12 +58,17 @@ router.post('/api/projects/:id/:action', (req, res, next) => {
   if (action === 'love' || action === 'favourite') {
     const ip = req.ip;
     const map = oneTimeActions[action];
-    if (!map.has(id)) map.set(id, new Set());
-    if (map.get(id).has(ip)) {
+
+    if (!map.has(id)) {
+      map.set(id, new Map());
+    }
+
+    const ipMap = map.get(id);
+    if (ipMap.has(ip)) {
       return res.status(429).json({ error: `You have already ${action}d this project` });
     }
 
-    map.get(id).add(ip);
+    ipMap.set(ip, true);
     return next();
   }
 
