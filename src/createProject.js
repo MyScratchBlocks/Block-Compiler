@@ -60,6 +60,7 @@ router.post('/', async (req, res) => {
     const zip = new AdmZip();
     zip.addFile('project.json', Buffer.from('{"targets":[{"isStage":true,"name":"Stage","variables":{"`jEk@4|i[#Fk?(8x)AV.-my variable":["my variable",0]},"lists":{},"broadcasts":{},"blocks":{},"comments":{},"currentCostume":0,"costumes":[{"name":"backdrop1","dataFormat":"svg","assetId":"cd21514d0531fdffb22204e0ec5ed84a","md5ext":"cd21514d0531fdffb22204e0ec5ed84a.svg","rotationCenterX":240,"rotationCenterY":180}],"sounds":[{"name":"pop","assetId":"83a9787d4cb6f3b7632b4ddfebf74367","dataFormat":"wav","format":"","rate":48000,"sampleCount":1123,"md5ext":"83a9787d4cb6f3b7632b4ddfebf74367.wav"}],"volume":100,"layerOrder":0,"tempo":60,"videoTransparency":50,"videoState":"on","textToSpeechLanguage":null}],"monitors":[],"extensions":[],"meta":{"semver":"3.0.0","vm":"11.1.0","agent":"Mozilla/5.0"}}', 'utf-8'));
     zip.addFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
+    zip.addFile('comments.json', Buffer.from('[]'));
     zip.writeZip(localFilePath);
 
     res.json({ message: 'Empty project created', id: fileNum, sb3File: `${fileNum}.sb3`, projectData: dataJson });
