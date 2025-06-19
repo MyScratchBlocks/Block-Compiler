@@ -29,7 +29,7 @@ const projectsRoute = require('./projects');
 const commentsRouter = require('./comments');
 const usersRouter = require('./users');
 
-app.use('/api/projects', commentsRouter); // Comments
+app.use(commentsRouter); // Comments
 app.use(projectsRoute);  // Projects
 app.use(usersRouter);       // Users
 
