@@ -26,9 +26,11 @@ router.post('/:id/save', upload.single('project'), (req, res) => {
   try {
     const existingZip = new AdmZip(destPath);
     const dataEntry = existingZip.getEntry('data.json');
+    const comments = existingZip.getEntry('comments.json');
     if (!dataEntry) throw new Error('Missing data.json in existing project');
 
     const dataJson = JSON.parse(dataEntry.getData().toString());
+    const cJson = JSON.parse(comments.getData().toString());
 
     // Update project title if provided
     if (typeof projectName === 'string') {
@@ -39,7 +41,8 @@ router.post('/:id/save', upload.single('project'), (req, res) => {
     const newZip = new AdmZip();
 
     // Always include updated data.json
-    newZip.addFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
+    newZip.addFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2))); 
+    newZip.addFile('comments.json', Buffer.from(JSON.stringify(cJson, null, 2)));
 
     uploadedZip.getEntries().forEach(entry => {
       const name = entry.entryName;
