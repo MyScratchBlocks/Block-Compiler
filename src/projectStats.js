@@ -2,26 +2,16 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const AdmZip = require('adm-zip');
-const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
 const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
 
-// Track one-time actions per IP per project
-const oneTimeActions = {
-  love: new Map(),        // Map<projectId, Map<ip, true>>
-  favourite: new Map()
+// Track actions per user per project
+const userActions = {
+  love: new Map(),        // Map<projectId, Set<username>>
+  favourite: new Map(),   // Map<projectId, Set<username>>
+  views: new Map(),       // Map<projectId, Map<username, timestamp>>
 };
-
-// View limiter: 1 view per IP per project per 24 hours
-const viewLimiter = rateLimit({
-  windowMs: 24 * 60 * 60 * 1000,
-  max: 1,
-  keyGenerator: (req) => `${req.params.id}_view_${req.ip}`,
-  message: { error: 'View limit reached for today' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
 function validateId(id) {
   return /^\d+$/.test(id);
@@ -37,17 +27,22 @@ function updateStats(filePath, actionKey) {
 
   zip.deleteFile('data.json');
   zip.addFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
-
   zip.writeZip(filePath);
+
   return dataJson.stats;
 }
 
-// Handle love/favourite
+// Handle love and favourite
 router.post('/api/projects/:id/:action', (req, res, next) => {
   const { id, action } = req.params;
+  const username = req.body.user;
 
   if (!validateId(id)) {
     return res.status(400).json({ error: 'Invalid project ID format' });
+  }
+
+  if (!username) {
+    return res.status(400).json({ error: 'Username is required' });
   }
 
   const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
@@ -56,19 +51,18 @@ router.post('/api/projects/:id/:action', (req, res, next) => {
   }
 
   if (action === 'love' || action === 'favourite') {
-    const ip = req.ip;
-    const map = oneTimeActions[action];
+    const actionMap = userActions[action];
 
-    if (!map.has(id)) {
-      map.set(id, new Map());
+    if (!actionMap.has(id)) {
+      actionMap.set(id, new Set());
     }
 
-    const ipMap = map.get(id);
-    if (ipMap.has(ip)) {
+    const userSet = actionMap.get(id);
+    if (userSet.has(username)) {
       return res.status(429).json({ error: `You have already ${action}d this project` });
     }
 
-    ipMap.set(ip, true);
+    userSet.add(username);
     return next();
   }
 
@@ -87,18 +81,39 @@ router.post('/api/projects/:id/:action', (req, res, next) => {
   }
 });
 
-// Handle views
-router.post('/api/:id/views', viewLimiter, (req, res) => {
+// Handle views (1 per user per day per project)
+router.post('/api/:id/views', (req, res) => {
   const { id } = req.params;
+  const username = req.body.user;
 
   if (!validateId(id)) {
     return res.status(400).json({ error: 'Invalid project ID format' });
+  }
+
+  if (!username) {
+    return res.status(400).json({ error: 'Username is required' });
   }
 
   const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({ error: 'Project not found' });
   }
+
+  const now = Date.now();
+  const viewMap = userActions.views;
+
+  if (!viewMap.has(id)) {
+    viewMap.set(id, new Map());
+  }
+
+  const userViewMap = viewMap.get(id);
+  const lastViewed = userViewMap.get(username);
+
+  if (lastViewed && now - lastViewed < 24 * 60 * 60 * 1000) {
+    return res.status(429).json({ message: 'View limit reached for today' });
+  }
+
+  userViewMap.set(username, now);
 
   try {
     const updatedStats = updateStats(filePath, 'views');
