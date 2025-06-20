@@ -33,9 +33,8 @@ function updateStats(filePath, actionKey) {
 }
 
 // Handle love and favourite
-router.post('/api/projects/:id/:action', (req, res, next) => {
-  const { id, action } = req.params;
-  const username = req.body.user;
+router.post('/api/projects/:id/:action/:username', (req, res, next) => {
+  const { id, action, username } = req.params;
 
   if (!validateId(id)) {
     return res.status(400).json({ error: 'Invalid project ID format' });
@@ -82,9 +81,8 @@ router.post('/api/projects/:id/:action', (req, res, next) => {
 });
 
 // Handle views (1 per user per day per project)
-router.post('/api/:id/views', (req, res) => {
-  const { id } = req.params;
-  const username = req.body.user;
+router.post('/api/:id/views/:username', (req, res) => {
+  const { id, username } = req.params;
 
   if (!validateId(id)) {
     return res.status(400).json({ error: 'Invalid project ID format' });
