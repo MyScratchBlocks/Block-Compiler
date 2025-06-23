@@ -9,7 +9,7 @@ const router = express.Router();
 
 const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
 const REPO_OWNER = 'MyScratchBlocks';
-const REPO_NAME = 'ProjectDB';
+const REPO_NAME = 'Project-DB';
 const BRANCH = 'main'; // Or 'master' if default is that
 
 const GITHUB_TOKEN = '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';
