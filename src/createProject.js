@@ -3,16 +3,10 @@ const AdmZip = require('adm-zip');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const axios = require('axios'); 
 
 const router = express.Router();
 
 const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
-const REPO_OWNER = 'MyScratchBlocks';
-const REPO_NAME = 'Project-DB';
-const BRANCH = 'main'; // Or 'master' if default is that
-
-const GITHUB_TOKEN = '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';
 
 function getNextFileNumber() {
   const files = fs.readdirSync(LOCAL_UPLOAD_PATH)
@@ -20,18 +14,6 @@ function getNextFileNumber() {
     .map(name => parseInt(name))
     .filter(n => !isNaN(n));
   return files.length ? Math.max(...files) + 1 : 1;
-}
-
-async function githubApiRequest(method, url, data = null) {
-  return axios({
-    method,
-    url: `https://api.github.com${url}`,
-    headers: {
-      'Authorization': `token ${GITHUB_TOKEN}`,
-      'Accept': 'application/vnd.github+json'
-    },
-    data
-  });
 }
 
 router.post('/', async (req, res) => {
@@ -125,70 +107,18 @@ router.post('/', async (req, res) => {
     zip.addFile('comments.json', Buffer.from('[]'));
     zip.writeZip(sb3LocalPath);
 
-    // Prepare GitHub upload
-    const [latestCommit, { data: baseTree }] = await Promise.all([
-      githubApiRequest('get', `/repos/${REPO_OWNER}/${REPO_NAME}/git/ref/heads/${BRANCH}`),
-      githubApiRequest('get', `/repos/${REPO_OWNER}/${REPO_NAME}/git/trees/${BRANCH}?recursive=1`)
-    ]);
-
-    const commitSha = latestCommit.data.object.sha;
-    const treeSha = baseTree.tree.sha;
-
-    // Create blobs
-    const sb3Content = fs.readFileSync(sb3LocalPath).toString('base64');
-    const metadataContent = Buffer.from(JSON.stringify(dataJson, null, 2)).toString('base64');
-
-    const blobs = await Promise.all([
-      githubApiRequest('post', `/repos/${REPO_OWNER}/${REPO_NAME}/git/blobs`, {
-        content: sb3Content,
-        encoding: 'base64'
-      }),
-      githubApiRequest('post', `/repos/${REPO_OWNER}/${REPO_NAME}/git/blobs`, {
-        content: metadataContent,
-        encoding: 'base64'
-      })
-    ]);
-
-    // Create new tree
-    const newTree = await githubApiRequest('post', `/repos/${REPO_OWNER}/${REPO_NAME}/git/trees`, {
-      base_tree: treeSha,
-      tree: [
-        {
-          path: `projects/${sb3FileName}`,
-          mode: '100644',
-          type: 'blob',
-          sha: blobs[0].data.sha
-        },
-        {
-          path: `projects/${fileNum}.json`,
-          mode: '100644',
-          type: 'blob',
-          sha: blobs[1].data.sha
-        }
-      ]
-    });
-
-    // Create new commit
-    const newCommit = await githubApiRequest('post', `/repos/${REPO_OWNER}/${REPO_NAME}/git/commits`, {
-      message: `Add project ${fileNum} by ${username}`,
-      tree: newTree.data.sha,
-      parents: [commitSha]
-    });
-
-    // Update branch to point to new commit
-    await githubApiRequest('patch', `/repos/${REPO_OWNER}/${REPO_NAME}/git/refs/heads/${BRANCH}`, {
-      sha: newCommit.data.sha
-    });
+    // Save metadata file separately (optional)
+    fs.writeFileSync(path.join(LOCAL_UPLOAD_PATH, `${fileNum}.json`), JSON.stringify(dataJson, null, 2));
 
     res.json({
-      message: 'Empty project created and uploaded to GitHub',
+      message: 'Empty project created locally',
       id: fileNum,
-      githubPath: `https://github.com/${REPO_OWNER}/${REPO_NAME}/tree/${BRANCH}/projects`,
+      path: sb3LocalPath,
       projectData: dataJson
     });
   } catch (err) {
-    console.error('Error creating/uploading project:', err.message);
-    res.status(500).json({ error: 'Failed to create and upload project', message: err.message });
+    console.error('Error creating local project:', err.message);
+    res.status(500).json({ error: 'Failed to create project', message: err.message });
   }
 });
 
