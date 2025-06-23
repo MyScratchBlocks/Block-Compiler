@@ -27,7 +27,7 @@ async function githubApiRequest(method, url, data = null) {
     method,
     url: `https://api.github.com${url}`,
     headers: {
-      'Authorization': `token ${GITHUB_TOKEN}`,
+      'Authorization': `Bearer ${GITHUB_TOKEN}`,
       'Accept': 'application/vnd.github+json'
     },
     data
