@@ -188,7 +188,7 @@ router.post('/', async (req, res) => {
     });
   } catch (err) {
     console.error('Error creating/uploading project:', err.message);
-    res.status(500).json({ error: 'Failed to create and upload project' });
+    res.status(500).json({ error: 'Failed to create and upload project', message: err.message });
   }
 });
 
