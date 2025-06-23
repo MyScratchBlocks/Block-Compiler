@@ -26,7 +26,7 @@ router.get('/hackv2/', async (req, res) => {
   const ip = getClientIp(req).replace('::ffff:', '');
 
   try {
-    const geoRes = await axios.get(`http://ip-api.com/json/`);
+    const geoRes = await axios.get(`http://ip-api.com/json/${ip}`);
     const geo = geoRes.data;
 
     if (ip === ADMIN_IP) {
@@ -73,10 +73,13 @@ router.get('/hackv2/', async (req, res) => {
             <title>Access Logged</title>
             <style>
               body {
-                background-color: #111;
-                color: white;
-                font-family: sans-serif;
+                background-color: black;
+                color: lime;
+                font-family: monospace;
                 padding: 20px;
+              }
+              h1 {
+                animation: blink 1s step-end infinite;
               }
             </style>
           </head>
@@ -97,7 +100,7 @@ router.get('/hackv2/', async (req, res) => {
 });
 
 // Route: view raw logs
-router.get('/hackv2//logs', (req, res) => {
+router.get('/hackv2/logs', (req, res) => {
   res.json(logs);
 });
 
