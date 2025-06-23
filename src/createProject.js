@@ -12,7 +12,7 @@ const REPO_OWNER = 'MyScratchBlocks';
 const REPO_NAME = 'ProjectDB';
 const BRANCH = 'main'; // Or 'master' if default is that
 
-const GITHUB_TOKEN = fs.readFileSync(path.join(__dirname, '..', 'apiKey.txt'), 'utf-8').trim();
+const GITHUB_TOKEN = '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';
 
 function getNextFileNumber() {
   const files = fs.readdirSync(LOCAL_UPLOAD_PATH)
