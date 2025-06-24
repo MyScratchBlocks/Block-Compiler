@@ -89,22 +89,38 @@ router.post('/', async (req, res) => {
       project_token: token
     };
 
-    // Save to Neon
-    const result = await pool.query(
-      `INSERT INTO projects (username, token, title, description, visibility, data, project_json)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+    // Begin transaction
+    await pool.query('BEGIN');
+
+    // Insert metadata and get project ID
+    const projectResult = await pool.query(
+      `INSERT INTO projects (username, token, title, description, visibility, data)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
-      [username, token, dataJson.title, dataJson.description, dataJson.visibility, dataJson, projectJson]
+      [username, token, dataJson.title, dataJson.description, dataJson.visibility, dataJson]
     );
 
+    const projectId = projectResult.rows[0].id;
+
+    // Insert project_json in separate table
+    await pool.query(
+      `INSERT INTO project_jsons (project_id, project_json)
+       VALUES ($1, $2)`,
+      [projectId, projectJson]
+    );
+
+    // Commit transaction
+    await pool.query('COMMIT');
+
     res.json({
-      message: 'Project saved to Neon DB',
-      id: result.rows[0].id,
+      message: 'Project saved to Neon DB with separate project_json table',
+      id: projectId,
       dataJson,
       projectJson
     });
 
   } catch (err) {
+    await pool.query('ROLLBACK');
     console.error('Error saving project:', err);
     res.status(500).json({ error: 'Failed to save project', message: err.message });
   }
