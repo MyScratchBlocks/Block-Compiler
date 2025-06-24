@@ -10,11 +10,11 @@ router.get('/json/:id', async (req, res) => {
   }
 
   try {
-    // Query project_json JSONB column from projects table
-    const result = await pool.query('SELECT project_json FROM projects WHERE id = $1', [id]);
+    // Query project_json JSONB column from project_jsons table by project_id
+    const result = await pool.query('SELECT project_json FROM project_jsons WHERE project_id = $1', [id]);
 
     if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Project not found' });
+      return res.status(404).json({ error: 'Project JSON not found' });
     }
 
     const projectJson = result.rows[0].project_json;
