@@ -1,48 +1,40 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
-
+const pool = require('./db');  // neon db pool
 const router = express.Router();
-const LOCAL_ASSET_PATH = path.join(__dirname, '..', 'local_storage/assets');
 
-function getMimeType(filename) {
-  const ext = filename.split('.').pop().toLowerCase();
-  const types = {
-    png: 'image/png',
-    svg: 'image/svg+xml',
-    wav: 'audio/wav',
-    mp3: 'audio/mpeg',
-    json: 'application/json'
-  };
-  return types[ext] || 'application/octet-stream';
-}
-
-function serveAssetAsDownload(req, res) {
+async function serveAssetFromDb(req, res) {
   const filename = req.params.md5ext;
 
-  if (filename.includes('..') || path.isAbsolute(filename)) {
+  if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
     return res.status(400).json({ error: 'Invalid filename' });
   }
 
-  const assetPath = path.join(LOCAL_ASSET_PATH, filename);
-  if (!fs.existsSync(assetPath)) {
-    return res.status(404).json({ error: 'Asset not found' });
+  try {
+    // Query asset binary and mime_type from DB
+    const result = await pool.query(
+      'SELECT data, mime_type FROM assets WHERE md5ext = $1',
+      [filename]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Asset not found' });
+    }
+
+    const { data, mime_type } = result.rows[0];
+
+    res.setHeader('Content-Type', mime_type || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // Send the binary data directly
+    res.send(data);
+
+  } catch (err) {
+    console.error('DB asset retrieval error:', err);
+    res.status(500).json({ error: 'Failed to retrieve asset from DB' });
   }
-
-  res.setHeader('Content-Type', getMimeType(filename));
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
-  const stream = fs.createReadStream(assetPath);
-  stream.on('error', err => {
-    console.error('Stream error:', err.message);
-    res.status(500).end();
-  });
-
-  stream.pipe(res);
 }
 
-// Both endpoints serve as downloads
-router.get('/assets/internalapi/asset/:md5ext', serveAssetAsDownload);
-router.get('/assets/internalapi/asset/:md5ext/get', serveAssetAsDownload);
+router.get('/assets/internalapi/asset/:md5ext', serveAssetFromDb);
+router.get('/assets/internalapi/asset/:md5ext/get', serveAssetFromDb);
 
 module.exports = router;
