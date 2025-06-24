@@ -2,81 +2,84 @@ const express = require('express');
 const multer = require('multer');
 const AdmZip = require('adm-zip');
 const fs = require('fs');
-const path = require('path');
+const pool = require('./db');
 
 const router = express.Router();
 const upload = multer({ dest: 'temp_uploads/' });
 
-const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
-const LOCAL_ASSET_PATH = path.join(__dirname, '..', 'local_storage/assets');
-
-// Ensure directories exist
-if (!fs.existsSync(LOCAL_UPLOAD_PATH)) fs.mkdirSync(LOCAL_UPLOAD_PATH, { recursive: true });
-if (!fs.existsSync(LOCAL_ASSET_PATH)) fs.mkdirSync(LOCAL_ASSET_PATH, { recursive: true });
-
-router.post('/:id/save', upload.single('project'), (req, res) => {
+router.post('/:id/save', upload.single('project'), async (req, res) => {
   const { id } = req.params;
   const sb3Blob = req.file;
   const { projectName } = req.body;
-  const destPath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
 
   if (!sb3Blob) return res.status(400).json({ error: 'No project file provided' });
-  if (!fs.existsSync(destPath)) return res.status(404).json({ error: 'Project not found' });
 
   try {
-    const existingZip = new AdmZip(destPath);
-    const dataEntry = existingZip.getEntry('data.json');
-    const comments = existingZip.getEntry('comments.json');
-    if (!dataEntry) throw new Error('Missing data.json in existing project');
+    const uploadedZip = new AdmZip(sb3Blob.path);
 
+    // Extract data.json (metadata)
+    const dataEntry = uploadedZip.getEntry('data.json');
+    if (!dataEntry) throw new Error('Missing data.json in uploaded project');
     const dataJson = JSON.parse(dataEntry.getData().toString());
-    const cJson = JSON.parse(comments.getData().toString());
 
-    // Update project title if provided
+    // Optionally update project title
     if (typeof projectName === 'string') {
       dataJson.title = projectName;
     }
 
-    const uploadedZip = new AdmZip(sb3Blob.path);
-    const newZip = new AdmZip();
+    // Extract project.json
+    const projectJsonEntry = uploadedZip.getEntry('project.json');
+    if (!projectJsonEntry) throw new Error('Missing project.json in uploaded project');
+    const projectJson = JSON.parse(projectJsonEntry.getData().toString());
 
-    // Always include updated data.json
-    newZip.addFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2))); 
-    newZip.addFile('comments.json', Buffer.from(JSON.stringify(cJson, null, 2)));
+    // Begin DB transaction
+    await pool.query('BEGIN');
 
-    uploadedZip.getEntries().forEach(entry => {
-      const name = entry.entryName;
+    // Update metadata in projects table
+    await pool.query(
+      `UPDATE projects SET data = $1 WHERE id = $2`,
+      [dataJson, id]
+    );
 
-      if (name === 'project.json' || /\.(png|svg|wav|mp3)$/.test(name)) {
-        newZip.addFile(name, entry.getData());
-      }
+    // Upsert project_json in project_jsons table
+    await pool.query(
+      `INSERT INTO project_jsons (project_id, project_json) VALUES ($1, $2)
+       ON CONFLICT (project_id) DO UPDATE SET project_json = EXCLUDED.project_json`,
+      [id, projectJson]
+    );
 
-      // Extract and overwrite asset in assets folder
-      if (/\.(png|svg|wav|mp3)$/.test(name)) {
-        const assetPath = path.join(LOCAL_ASSET_PATH, name);
+    // Extract and upsert assets
+    const assetEntries = uploadedZip.getEntries().filter(e => /\.(png|svg|wav|mp3)$/.test(e.entryName));
 
-        try {
-          if (fs.existsSync(assetPath)) {
-            fs.unlinkSync(assetPath);
-          }
+    for (const entry of assetEntries) {
+      const filename = entry.entryName;
+      const fileBuffer = entry.getData();
 
-          fs.writeFileSync(assetPath, entry.getData());
-        } catch (assetErr) {
-          console.warn(`Failed to save asset: ${name}`, assetErr.message);
-        }
-      }
-    });
+      await pool.query(
+        `INSERT INTO assets (project_id, filename, data) VALUES ($1, $2, $3)
+         ON CONFLICT (project_id, filename) DO UPDATE SET data = EXCLUDED.data`,
+        [id, filename, fileBuffer]
+      );
+    }
 
-    newZip.writeZip(destPath);
-    fs.unlinkSync(sb3Blob.path); // cleanup temp upload
+    await pool.query('COMMIT');
 
-    res.json({ message: 'Project updated', id, updatedTitle: dataJson.title });
+    // Clean up temp upload
+    fs.unlinkSync(sb3Blob.path);
+
+    res.json({ message: 'Project JSON and assets updated', id, updatedTitle: dataJson.title });
+
   } catch (err) {
     console.error('Error saving project:', err.message);
+    try {
+      await pool.query('ROLLBACK');
+    } catch (rollbackErr) {
+      console.error('Rollback error:', rollbackErr.message);
+    }
     if (sb3Blob && fs.existsSync(sb3Blob.path)) {
       fs.unlinkSync(sb3Blob.path);
     }
-    res.status(500).json({ error: 'Failed to save project' });
+    res.status(500).json({ error: 'Failed to save project', message: err.message });
   }
 });
 
