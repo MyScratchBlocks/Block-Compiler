@@ -1,22 +1,11 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const pool = require('./db'); // Neon DB connection
+const pool = require('./db');
 
 const router = express.Router();
 
-function getNextFileNumber() {
-  const files = fs.readdirSync(path.join(__dirname, '..', 'local_storage/uploads') || [])
-    .filter(name => name.endsWith('.sb3'))
-    .map(name => parseInt(name))
-    .filter(n => !isNaN(n));
-  return files.length ? Math.max(...files) + 1 : 1;
-}
-
 router.post('/', async (req, res) => {
   try {
-    const fileNum = getNextFileNumber();
     const username = req.body.username;
 
     if (typeof username !== 'string' || username.includes("MyScratchBlocks-")) {
@@ -26,8 +15,54 @@ router.post('/', async (req, res) => {
     const token = `${Date.now()}_${uuidv4().replace(/-/g, '')}`;
     const now = new Date().toISOString();
 
+    // Scratch-style project.json
+    const projectJson = {
+      targets: [{
+        isStage: true,
+        name: 'Stage',
+        variables: {
+          '`jEk@4|i[#Fk?(8x)AV.-my variable': ['my variable', 0]
+        },
+        lists: {},
+        broadcasts: {},
+        blocks: {},
+        comments: {},
+        currentCostume: 0,
+        costumes: [{
+          name: 'backdrop1',
+          dataFormat: 'svg',
+          assetId: 'cd21514d0531fdffb22204e0ec5ed84a',
+          md5ext: 'cd21514d0531fdffb22204e0ec5ed84a.svg',
+          rotationCenterX: 240,
+          rotationCenterY: 180
+        }],
+        sounds: [{
+          name: 'pop',
+          assetId: '83a9787d4cb6f3b7632b4ddfebf74367',
+          dataFormat: 'wav',
+          format: '',
+          rate: 48000,
+          sampleCount: 1123,
+          md5ext: '83a9787d4cb6f3b7632b4ddfebf74367.wav'
+        }],
+        volume: 100,
+        layerOrder: 0,
+        tempo: 60,
+        videoTransparency: 50,
+        videoState: 'on',
+        textToSpeechLanguage: null
+      }],
+      monitors: [],
+      extensions: [],
+      meta: {
+        semver: '3.0.0',
+        vm: '11.1.0',
+        agent: 'Mozilla/5.0'
+      }
+    };
+
+    // Project metadata
     const dataJson = {
-      id: fileNum,
       title: 'Untitled Project',
       description: '',
       instructions: '',
@@ -42,7 +77,7 @@ router.post('/', async (req, res) => {
         history: { joined: '1900-01-01T00:00:00.000Z' },
         profile: { id: null, images: {} }
       },
-      image: `local_assets/${fileNum}_480x360.png`,
+      image: null,
       images: {},
       history: {
         created: now,
@@ -54,31 +89,24 @@ router.post('/', async (req, res) => {
       project_token: token
     };
 
-    // Save to Neon DB
+    // Save to Neon
     const result = await pool.query(
-      `INSERT INTO projects (username, token, title, description, visibility, data)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-      [
-        username,
-        token,
-        dataJson.title,
-        dataJson.description,
-        dataJson.visibility,
-        dataJson
-      ]
+      `INSERT INTO projects (username, token, title, description, visibility, data, project_json)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id`,
+      [username, token, dataJson.title, dataJson.description, dataJson.visibility, dataJson, projectJson]
     );
 
-    const projectId = result.rows[0].id;
-
     res.json({
-      message: 'Project metadata saved to Neon DB',
-      id: projectId,
-      projectData: dataJson
+      message: 'Project saved to Neon DB',
+      id: result.rows[0].id,
+      dataJson,
+      projectJson
     });
 
   } catch (err) {
     console.error('Error saving project:', err);
-    res.status(500).json({ error: 'Database error', message: err.message });
+    res.status(500).json({ error: 'Failed to save project', message: err.message });
   }
 });
 
