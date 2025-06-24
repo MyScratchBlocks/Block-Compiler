@@ -1,19 +1,30 @@
 const express = require('express');
-const pool = require('./db');  // neon db pool
+const pool = require('./db');
 const router = express.Router();
 
-async function serveAssetFromDb(req, res) {
-  const filename = req.params.md5ext;
+function getMimeType(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  const types = {
+    png: 'image/png',
+    svg: 'image/svg+xml',
+    wav: 'audio/wav',
+    mp3: 'audio/mpeg',
+    json: 'application/json'
+  };
+  return types[ext] || 'application/octet-stream';
+}
 
-  if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+async function serveAssetFromDb(req, res) {
+  const md5ext = req.params.md5ext;
+
+  if (md5ext.includes('..') || md5ext.includes('/') || md5ext.includes('\\')) {
     return res.status(400).json({ error: 'Invalid filename' });
   }
 
   try {
-    // Query asset binary and mime_type from DB
     const result = await pool.query(
       'SELECT data, mime_type FROM assets WHERE md5ext = $1',
-      [filename]
+      [md5ext]
     );
 
     if (result.rowCount === 0) {
@@ -21,13 +32,11 @@ async function serveAssetFromDb(req, res) {
     }
 
     const { data, mime_type } = result.rows[0];
+    const contentType = mime_type || getMimeType(md5ext);
 
-    res.setHeader('Content-Type', mime_type || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
-    // Send the binary data directly
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${md5ext}"`);
     res.send(data);
-
   } catch (err) {
     console.error('DB asset retrieval error:', err);
     res.status(500).json({ error: 'Failed to retrieve asset from DB' });
