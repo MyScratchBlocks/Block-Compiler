@@ -32,25 +32,26 @@ router.post('/:id/save', upload.single('project'), async (req, res) => {
     if (!projectJsonEntry) throw new Error('Missing project.json in uploaded project');
     const projectJson = JSON.parse(projectJsonEntry.getData().toString());
 
-    // Begin DB transaction
+    // Begin transaction
     await pool.query('BEGIN');
 
-    // Update metadata in projects table
+    // Update projects table metadata and title
     await pool.query(
-      `UPDATE projects SET data = $1 WHERE id = $2`,
-      [dataJson, id]
+      `UPDATE projects SET data = $1, title = $2 WHERE id = $3`,
+      [dataJson, dataJson.title, id]
     );
 
-    // Upsert project_json in project_jsons table
+    // Upsert project_json in project_jsons table by project_id
     await pool.query(
       `INSERT INTO project_jsons (project_id, project_json) VALUES ($1, $2)
        ON CONFLICT (project_id) DO UPDATE SET project_json = EXCLUDED.project_json`,
       [id, projectJson]
     );
 
-    // Extract and upsert assets
+    // Extract asset entries with matching file extensions
     const assetEntries = uploadedZip.getEntries().filter(e => /\.(png|svg|wav|mp3)$/.test(e.entryName));
 
+    // Upsert each asset into assets table
     for (const entry of assetEntries) {
       const filename = entry.entryName;
       const fileBuffer = entry.getData();
@@ -64,7 +65,7 @@ router.post('/:id/save', upload.single('project'), async (req, res) => {
 
     await pool.query('COMMIT');
 
-    // Clean up temp upload
+    // Cleanup uploaded file
     fs.unlinkSync(sb3Blob.path);
 
     res.json({ message: 'Project JSON and assets updated', id, updatedTitle: dataJson.title });
