@@ -1,12 +1,8 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const AdmZip = require('adm-zip');
-
 const router = express.Router();
-const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
+const pool = require('./db'); // Your Neon DB connection pool
 
-// Helper function to set nested value by path
+// Helper to set nested values by dot notation path
 function setNestedValue(obj, path, value) {
   const keys = path.split('.');
   let current = obj;
@@ -20,126 +16,86 @@ function setNestedValue(obj, path, value) {
   current[keys[keys.length - 1]] = value;
 }
 
-// GET route - read metadata
-router.get('/api/projects/:id/meta/:username', (req, res) => {
-  const { id, username } = req.params;
+// GET project metadata
+router.get('/api/projects/:id/meta/:username', async (req, res) => {
+  const id = parseInt(req.params.id);
+  const username = req.params.username;
 
-  if (!/^\d+$/.test(id)) {
-    return res.status(400).json({ error: 'Invalid project ID format' });
-  }
-
-  const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid project ID format' });
 
   try {
-    fs.accessSync(filePath, fs.constants.F_OK);
+    const projectRes = await pool.query('SELECT data FROM projects WHERE id = $1', [id]);
 
-    const zip = new AdmZip(filePath);
-    const entry = zip.getEntry('data.json');
-
-    if (!entry) {
-      return res.status(404).json({ error: 'data.json not found in project file' });
+    if (projectRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Project not found' });
     }
 
-    const data = JSON.parse(entry.getData().toString('utf-8'));
+    const data = projectRes.rows[0].data;
 
     if (data.visibility === 'unshared') {
       if (username === data.author?.username) {
-        res.json(data);
+        return res.json(data);
       } else {
-        res.status(403).json({ error: 'Unauthorized' });
+        return res.status(403).json({ error: 'Unauthorized' });
       }
     } else {
-      res.json(data); // Shared project
+      return res.json(data);
     }
   } catch (err) {
-    console.error('Metadata read error:', err.stack || err.message);
+    console.error('Metadata read error:', err);
     return res.status(500).json({ error: 'Failed to read project metadata' });
   }
 });
 
-// PUT route - edit metadata
-router.put('/api/projects/:id/meta', (req, res) => {
-  const { id } = req.params;
+// PUT update project metadata
+router.put('/api/projects/:id/meta', async (req, res) => {
+  const id = parseInt(req.params.id);
   const updates = req.body;
 
-  if (!/^\d+$/.test(id)) {
-    return res.status(400).json({ error: 'Invalid project ID format' }); // Fixed syntax error
-  }
-
-  const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid project ID format' });
 
   try {
-    fs.accessSync(filePath, fs.constants.F_OK);
-
-    const zip = new AdmZip(filePath);
-    const entry = zip.getEntry('data.json');
-
-    if (!entry) {
-      return res.status(404).json({ error: 'data.json not found in project file' });
+    const projectRes = await pool.query('SELECT data FROM projects WHERE id = $1', [id]);
+    if (projectRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Project not found' });
     }
 
-    let data;
-    try {
-      data = JSON.parse(entry.getData().toString('utf-8'));
-    } catch (parseErr) {
-      return res.status(500).json({ error: 'Failed to parse existing project metadata' });
-    }
+    const data = projectRes.rows[0].data;
 
     // Apply updates
     for (const key in updates) {
       setNestedValue(data, key, updates[key]);
     }
 
-    zip.deleteFile('data.json');
-    zip.addFile('data.json', Buffer.from(JSON.stringify(data, null, 2)));
-    zip.writeZip(filePath);
+    await pool.query('UPDATE projects SET data = $1 WHERE id = $2', [data, id]);
 
     res.json({ success: true, updated: updates });
   } catch (err) {
-    console.error('Metadata update error:', err.stack || err.message);
+    console.error('Metadata update error:', err);
     return res.status(500).json({ error: 'Failed to update project metadata' });
   }
 });
 
-// PUT route - share project
-router.put('/api/share/:id', (req, res) => {
-  const { id } = req.params;
+// PUT share project
+router.put('/api/share/:id', async (req, res) => {
+  const id = parseInt(req.params.id);
 
-  if (!/^\d+$/.test(id)) {
-    return res.status(400).json({ error: 'Invalid project ID format' });
-  }
-
-  const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid project ID format' });
 
   try {
-    fs.accessSync(filePath, fs.constants.F_OK);
-
-    const zip = new AdmZip(filePath);
-    const entry = zip.getEntry('data.json');
-
-    if (!entry) {
-      return res.status(404).json({ error: 'data.json not found in project file' });
+    const projectRes = await pool.query('SELECT data FROM projects WHERE id = $1', [id]);
+    if (projectRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Project not found' });
     }
 
-    let data;
-    try {
-      data = JSON.parse(entry.getData().toString('utf-8'));
-    } catch (parseErr) {
-      return res.status(500).json({ error: 'Failed to parse existing project metadata' });
-    }
-
+    const data = projectRes.rows[0].data;
     data.visibility = 'visible';
 
-    zip.deleteFile('data.json');
-    zip.addFile('data.json', Buffer.from(JSON.stringify(data, null, 2)));
-    zip.writeZip(filePath);
+    await pool.query('UPDATE projects SET data = $1 WHERE id = $2', [data, id]);
 
     res.json({ success: true, message: `Project ${id} visibility set to 'visible'` });
   } catch (err) {
-    if (err.code === 'ENOENT') {
-      return res.status(404).json({ error: 'Project file not found' });
-    }
-    console.error('Share project error:', err.stack || err.message);
+    console.error('Share project error:', err);
     return res.status(500).json({ error: 'Failed to share project' });
   }
 });
