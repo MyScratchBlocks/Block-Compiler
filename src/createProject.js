@@ -1,19 +1,13 @@
 const express = require('express');
-const AdmZip = require('adm-zip');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const pool = require('./db'); // Neon DB connection
 
 const router = express.Router();
-const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
-
-// Ensure the local upload path exists
-if (!fs.existsSync(LOCAL_UPLOAD_PATH)) {
-  fs.mkdirSync(LOCAL_UPLOAD_PATH, { recursive: true });
-}
 
 function getNextFileNumber() {
-  const files = fs.readdirSync(LOCAL_UPLOAD_PATH)
+  const files = fs.readdirSync(path.join(__dirname, '..', 'local_storage/uploads') || [])
     .filter(name => name.endsWith('.sb3'))
     .map(name => parseInt(name))
     .filter(n => !isNaN(n));
@@ -23,8 +17,6 @@ function getNextFileNumber() {
 router.post('/', async (req, res) => {
   try {
     const fileNum = getNextFileNumber();
-    const sb3FileName = `${fileNum}.sb3`;
-    const sb3LocalPath = path.join(LOCAL_UPLOAD_PATH, sb3FileName);
     const username = req.body.username;
 
     if (typeof username !== 'string' || username.includes("MyScratchBlocks-")) {
@@ -32,6 +24,7 @@ router.post('/', async (req, res) => {
     }
 
     const token = `${Date.now()}_${uuidv4().replace(/-/g, '')}`;
+    const now = new Date().toISOString();
 
     const dataJson = {
       id: fileNum,
@@ -52,77 +45,40 @@ router.post('/', async (req, res) => {
       image: `local_assets/${fileNum}_480x360.png`,
       images: {},
       history: {
-        created: new Date().toISOString(),
-        modified: new Date().toISOString(),
-        shared: new Date().toISOString()
+        created: now,
+        modified: now,
+        shared: now
       },
       stats: { views: 0, loves: 0, favorites: 0, remixes: 0 },
       remix: { parent: null, root: null },
       project_token: token
     };
 
-    const zip = new AdmZip();
+    // Save to Neon DB
+    const result = await pool.query(
+      `INSERT INTO projects (username, token, title, description, visibility, data)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [
+        username,
+        token,
+        dataJson.title,
+        dataJson.description,
+        dataJson.visibility,
+        dataJson
+      ]
+    );
 
-    zip.addFile('project.json', Buffer.from(JSON.stringify({
-      targets: [{
-        isStage: true,
-        name: 'Stage',
-        variables: {
-          '`jEk@4|i[#Fk?(8x)AV.-my variable': ['my variable', 0]
-        },
-        lists: {},
-        broadcasts: {},
-        blocks: {},
-        comments: {},
-        currentCostume: 0,
-        costumes: [{
-          name: 'backdrop1',
-          dataFormat: 'svg',
-          assetId: 'cd21514d0531fdffb22204e0ec5ed84a',
-          md5ext: 'cd21514d0531fdffb22204e0ec5ed84a.svg',
-          rotationCenterX: 240,
-          rotationCenterY: 180
-        }],
-        sounds: [{
-          name: 'pop',
-          assetId: '83a9787d4cb6f3b7632b4ddfebf74367',
-          dataFormat: 'wav',
-          format: '',
-          rate: 48000,
-          sampleCount: 1123,
-          md5ext: '83a9787d4cb6f3b7632b4ddfebf74367.wav'
-        }],
-        volume: 100,
-        layerOrder: 0,
-        tempo: 60,
-        videoTransparency: 50,
-        videoState: 'on',
-        textToSpeechLanguage: null
-      }],
-      monitors: [],
-      extensions: [],
-      meta: {
-        semver: '3.0.0',
-        vm: '11.1.0',
-        agent: 'Mozilla/5.0'
-      }
-    }, null, 2)));
-
-    zip.addFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
-    zip.addFile('comments.json', Buffer.from('[]'));
-
-    zip.writeZip(sb3LocalPath);
+    const projectId = result.rows[0].id;
 
     res.json({
-      message: 'Empty project created locally',
-      id: fileNum,
-      localPath: sb3LocalPath,
+      message: 'Project metadata saved to Neon DB',
+      id: projectId,
       projectData: dataJson
     });
 
   } catch (err) {
-    console.error('Error creating project locally:', err.message);
-    res.status(500).json({ error: 'Failed to create local project', message: err.message });
+    console.error('Error saving project:', err);
+    res.status(500).json({ error: 'Database error', message: err.message });
   }
 });
 
