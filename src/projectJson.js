@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('./db'); // Neon DB pool
+const pool = require('./db'); // Your Neon DB pool connection
 
 router.get('/json/:id', async (req, res) => {
   const id = parseInt(req.params.id);
@@ -10,7 +10,7 @@ router.get('/json/:id', async (req, res) => {
   }
 
   try {
-    // Assuming you have a 'project_json' column (JSONB) in the 'projects' table
+    // Query project_json JSONB column from projects table
     const result = await pool.query('SELECT project_json FROM projects WHERE id = $1', [id]);
 
     if (result.rowCount === 0) {
