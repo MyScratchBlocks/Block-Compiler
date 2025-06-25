@@ -6,13 +6,17 @@ const { Octokit } = require('@octokit/rest');
 const router = express.Router();
 
 // === CONFIG ===
-const GITHUB_TOKEN = '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';
+const GITHUB_TOKEN = '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'; // <-- Use env variable!
 const REPO_OWNER = 'kRxZykRxZy';
 const REPO_NAME = 'Project-DB';
 const BRANCH = 'main';
 
 const UPLOAD_DIR = path.join(__dirname, '..', 'local_storage', 'uploads');
 const ASSETS_DIR = path.join(__dirname, '..', 'local_storage', 'assets');
+
+if (!GITHUB_TOKEN) {
+  throw new Error('GITHUB_TOKEN environment variable not set!');
+}
 
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
@@ -34,8 +38,9 @@ async function getShaForFile(filePath) {
       ref: BRANCH,
     });
     return res.data.sha;
-  } catch {
-    return null; // File does not exist yet
+  } catch (e) {
+    if (e.status === 404) return null;
+    throw e;
   }
 }
 
@@ -58,6 +63,10 @@ async function uploadFile(filePath, contentBuffer) {
 }
 
 async function walkAndUpload(dirPath, basePath = '') {
+  if (!fs.existsSync(dirPath)) {
+    console.warn(`Directory missing: ${dirPath}, skipping.`);
+    return;
+  }
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
 
   for (const entry of entries) {
@@ -67,8 +76,12 @@ async function walkAndUpload(dirPath, basePath = '') {
     if (entry.isDirectory()) {
       await walkAndUpload(fullPath, relativePath);
     } else {
-      const content = fs.readFileSync(fullPath);
-      await uploadFile(relativePath, content);
+      try {
+        const content = fs.readFileSync(fullPath);
+        await uploadFile(relativePath, content);
+      } catch (err) {
+        console.error(`Failed to upload ${relativePath}:`, err.message);
+      }
     }
   }
 }
