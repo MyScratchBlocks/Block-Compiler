@@ -1,7 +1,7 @@
 const express = require('express');
-const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const { Octokit } = require('@octokit/rest');
 
 const router = express.Router();
 
@@ -14,14 +14,7 @@ const BRANCH = 'main';
 const UPLOAD_DIR = path.join(__dirname, '..', 'local_storage', 'uploads');
 const ASSETS_DIR = path.join(__dirname, '..', 'local_storage', 'assets');
 
-const api = axios.create({
-  baseURL: 'https://api.github.com',
-  headers: {
-    'User-Agent': 'node.js',
-    'Authorization': `token ${GITHUB_TOKEN}`,
-    'Accept': 'application/vnd.github+json',
-  }
-});
+const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
 // === STATUS STORE ===
 let uploadStatus = {
@@ -32,22 +25,17 @@ let uploadStatus = {
 
 // === CORE FUNCTIONS ===
 
-async function apiRequest(method, url, data = null) {
-  try {
-    const response = await api.request({ method, url, data });
-    return response.data;
-  } catch (error) {
-    const errMsg = error.response?.data?.message || error.message;
-    throw new Error(`GitHub API error: ${errMsg}`);
-  }
-}
-
 async function getShaForFile(filePath) {
   try {
-    const response = await apiRequest('GET', `/repos/${REPO_OWNER}/${REPO_NAME}/contents/${filePath}`);
-    return response.sha;
+    const res = await octokit.repos.getContent({
+      owner: REPO_OWNER,
+      repo: REPO_NAME,
+      path: filePath,
+      ref: BRANCH,
+    });
+    return res.data.sha;
   } catch {
-    return null; // File not found
+    return null; // File does not exist yet
   }
 }
 
@@ -56,14 +44,16 @@ async function uploadFile(filePath, contentBuffer) {
   const content = contentBuffer.toString('base64');
   const sha = await getShaForFile(repoPath);
 
-  const payload = {
+  await octokit.repos.createOrUpdateFileContents({
+    owner: REPO_OWNER,
+    repo: REPO_NAME,
+    path: repoPath,
     message: `Upload ${repoPath}`,
     content,
     branch: BRANCH,
     ...(sha && { sha }),
-  };
+  });
 
-  await apiRequest('PUT', `/repos/${REPO_OWNER}/${REPO_NAME}/contents/${repoPath}`, payload);
   console.log(`Uploaded: ${repoPath}`);
 }
 
@@ -103,8 +93,9 @@ async function performUpload() {
   }
 }
 
-// Start upload on app load
-performUpload();
+// === AUTO INTERVAL (Every 1 min) ===
+setInterval(performUpload, 60 * 1000); // 60 sec = 1 min
+performUpload(); // Run immediately on startup
 
 // === ROUTE ===
 router.get('/uptime', (req, res) => {
