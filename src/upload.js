@@ -6,8 +6,8 @@ const { Octokit } = require('@octokit/rest');
 const router = express.Router();
 
 // === CONFIG ===
-const GITHUB_TOKEN = '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'; // <-- Use env variable!
-const REPO_OWNER = 'kRxZykRxZy';
+const GITHUB_TOKEN = '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'; // Use env in production
+const REPO_OWNER = 'MyScratchBlocks';
 const REPO_NAME = 'Project-DB';
 const BRANCH = 'main';
 
@@ -27,7 +27,14 @@ let uploadStatus = {
   lastUpdated: null,
 };
 
-// === CORE FUNCTIONS ===
+// === HELPERS ===
+
+function clearDirectory(dir) {
+  if (fs.existsSync(dir)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
 
 async function getShaForFile(filePath) {
   try {
@@ -86,6 +93,40 @@ async function walkAndUpload(dirPath, basePath = '') {
   }
 }
 
+async function downloadFromGitHub(repoPath, localDir) {
+  try {
+    const { data } = await octokit.repos.getContent({
+      owner: REPO_OWNER,
+      repo: REPO_NAME,
+      path: repoPath,
+      ref: BRANCH,
+    });
+
+    if (Array.isArray(data)) {
+      fs.mkdirSync(localDir, { recursive: true });
+      for (const file of data) {
+        const fileRepoPath = path.posix.join(repoPath, file.name);
+        const localFilePath = path.join(localDir, file.name);
+        if (file.type === 'dir') {
+          await downloadFromGitHub(fileRepoPath, localFilePath);
+        } else {
+          const fileData = await octokit.repos.getContent({
+            owner: REPO_OWNER,
+            repo: REPO_NAME,
+            path: fileRepoPath,
+            ref: BRANCH,
+          });
+          const content = Buffer.from(fileData.data.content, 'base64');
+          fs.writeFileSync(localFilePath, content);
+          console.log(`Downloaded: ${fileRepoPath} → ${localFilePath}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`Failed to download ${repoPath}:`, err.message);
+  }
+}
+
 async function performUpload() {
   try {
     console.log('Uploading uploads...');
@@ -98,6 +139,17 @@ async function performUpload() {
     uploadStatus.error = null;
     uploadStatus.lastUpdated = new Date().toISOString();
     console.log('All files uploaded successfully.');
+
+    // === After successful upload ===
+    console.log('Clearing local folders...');
+    clearDirectory(UPLOAD_DIR);
+    clearDirectory(ASSETS_DIR);
+
+    console.log('Downloading fresh copies from GitHub...');
+    await downloadFromGitHub('uploads', UPLOAD_DIR);
+    await downloadFromGitHub('assets', ASSETS_DIR);
+
+    console.log('Resync complete.');
   } catch (err) {
     uploadStatus.completed = false;
     uploadStatus.error = err.message;
@@ -106,9 +158,11 @@ async function performUpload() {
   }
 }
 
-// === AUTO INTERVAL (Every 1 min) ===
-setInterval(performUpload, 60 * 1000); // 60 sec = 1 min
+// === STARTUP ===
 performUpload(); // Run immediately on startup
+
+// === AUTO INTERVAL (Every 1 min) ===
+setInterval(performUpload, 60 * 1000);
 
 // === ROUTE ===
 router.get('/uptime', (req, res) => {
