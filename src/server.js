@@ -31,6 +31,7 @@ const usersRouter = require('./users');
 
 
 app.use(require('./hackv2'));
+app.use(require('./upload'));
 app.use(commentsRouter); // Comments
 app.use(projectsRoute);  // Projects
 app.use(usersRouter);       // Users
