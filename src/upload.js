@@ -6,7 +6,7 @@ const { Octokit } = require('@octokit/rest');
 const router = express.Router();
 
 // === CONFIG ===
-const GITHUB_TOKEN = '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';
+const GITHUB_TOKEN = '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';
 const REPO_OWNER = 'kRxZykRxZy';
 const REPO_NAME = 'Project-DB';
 const BRANCH = 'main';
