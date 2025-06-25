@@ -1,119 +1,293 @@
 const express = require('express');
-const router = express.Router();
-const pool = require('./db'); // Neon DB pool connection
 
-// Helper: set nested object value using dot notation path (e.g., 'author.username')
+const fs = require('fs');
+
+const path = require('path');
+
+const AdmZip = require('adm-zip');
+
+
+
+const router = express.Router();
+
+const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
+
+
+
+// Helper function to set nested value by path
+
 function setNestedValue(obj, path, value) {
+
   const keys = path.split('.');
+
   let current = obj;
+
   for (let i = 0; i < keys.length - 1; i++) {
+
     const key = keys[i];
+
     if (!(key in current) || typeof current[key] !== 'object' || current[key] === null) {
+
       current[key] = {};
+
     }
+
     current = current[key];
+
   }
+
   current[keys[keys.length - 1]] = value;
+
 }
 
-// GET project metadata JSON from DB by project id and username authorization
-router.get('/api/projects/:id/meta/:username', async (req, res) => {
-  const id = parseInt(req.params.id);
-  const username = req.params.username;
 
-  if (isNaN(id)) {
+
+// GET route - read metadata
+
+router.get('/api/projects/:id/meta/:username', (req, res) => {
+
+  const { id, username } = req.params;
+
+
+
+  if (!/^\d+$/.test(id)) {
+
     return res.status(400).json({ error: 'Invalid project ID format' });
+
   }
+
+
+
+  const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
+
+
 
   try {
-    // Fetch project data JSON from DB
-    const projectRes = await pool.query('SELECT data FROM projects WHERE id = $1', [id]);
 
-    if (projectRes.rowCount === 0) {
-      return res.status(404).json({ error: 'Project not found' });
+    fs.accessSync(filePath, fs.constants.F_OK);
+
+
+
+    const zip = new AdmZip(filePath);
+
+    const entry = zip.getEntry('data.json');
+
+
+
+    if (!entry) {
+
+      return res.status(404).json({ error: 'data.json not found in project file' });
+
     }
 
-    const data = projectRes.rows[0].data;
 
-    // If project is unshared, only author can access
+
+    const data = JSON.parse(entry.getData().toString('utf-8'));
+
+
+
     if (data.visibility === 'unshared') {
+
       if (username === data.author?.username) {
-        return res.json(data);
+
+        res.json(data);
+
       } else {
-        return res.status(403).json({ error: 'Unauthorized' });
+
+        res.status(403).json({ error: 'Unauthorized' });
+
       }
+
+    } else {
+
+      res.json(data); // Shared project
+
     }
 
-    // Shared projects: anyone can access
-    return res.json(data);
   } catch (err) {
-    console.error('Metadata read error:', err);
+
+    console.error('Metadata read error:', err.stack || err.message);
+
     return res.status(500).json({ error: 'Failed to read project metadata' });
+
   }
+
 });
 
-// PUT update project metadata JSON in DB for given project id
-router.put('/api/projects/:id/meta', async (req, res) => {
-  const id = parseInt(req.params.id);
+
+
+// PUT route - edit metadata
+
+router.put('/api/projects/:id/meta', (req, res) => {
+
+  const { id } = req.params;
+
   const updates = req.body;
 
-  if (isNaN(id)) {
-    return res.status(400).json({ error: 'Invalid project ID format' });
+
+
+  if (!/^\d+$/.test(id)) {
+
+    return res.status(400).json({ error: 'Invalid project ID format' }); // Fixed syntax error
+
   }
 
+
+
+  const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
+
+
+
   try {
-    // Get current data JSON
-    const projectRes = await pool.query('SELECT data FROM projects WHERE id = $1', [id]);
 
-    if (projectRes.rowCount === 0) {
-      return res.status(404).json({ error: 'Project not found' });
+    fs.accessSync(filePath, fs.constants.F_OK);
+
+
+
+    const zip = new AdmZip(filePath);
+
+    const entry = zip.getEntry('data.json');
+
+
+
+    if (!entry) {
+
+      return res.status(404).json({ error: 'data.json not found in project file' });
+
     }
 
-    const data = projectRes.rows[0].data;
 
-    // Apply updates via dot notation keys
+
+    let data;
+
+    try {
+
+      data = JSON.parse(entry.getData().toString('utf-8'));
+
+    } catch (parseErr) {
+
+      return res.status(500).json({ error: 'Failed to parse existing project metadata' });
+
+    }
+
+
+
+    // Apply updates
+
     for (const key in updates) {
+
       setNestedValue(data, key, updates[key]);
+
     }
 
-    // Save updated data JSON back to DB
-    await pool.query('UPDATE projects SET data = $1 WHERE id = $2', [data, id]);
+
+
+    zip.deleteFile('data.json');
+
+    zip.addFile('data.json', Buffer.from(JSON.stringify(data, null, 2)));
+
+    zip.writeZip(filePath);
+
+
 
     res.json({ success: true, updated: updates });
+
   } catch (err) {
-    console.error('Metadata update error:', err);
+
+    console.error('Metadata update error:', err.stack || err.message);
+
     return res.status(500).json({ error: 'Failed to update project metadata' });
+
   }
+
 });
 
-// PUT to share project (set visibility to visible)
-router.put('/api/share/:id', async (req, res) => {
-  const id = parseInt(req.params.id);
 
-  if (isNaN(id)) {
+
+// PUT route - share project
+
+router.put('/api/share/:id', (req, res) => {
+
+  const { id } = req.params;
+
+
+
+  if (!/^\d+$/.test(id)) {
+
     return res.status(400).json({ error: 'Invalid project ID format' });
+
   }
+
+
+
+  const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
+
+
 
   try {
-    const projectRes = await pool.query('SELECT data FROM projects WHERE id = $1', [id]);
 
-    if (projectRes.rowCount === 0) {
-      return res.status(404).json({ error: 'Project not found' });
+    fs.accessSync(filePath, fs.constants.F_OK);
+
+
+
+    const zip = new AdmZip(filePath);
+
+    const entry = zip.getEntry('data.json');
+
+
+
+    if (!entry) {
+
+      return res.status(404).json({ error: 'data.json not found in project file' });
+
     }
 
-    const data = projectRes.rows[0].data;
 
-    // Change visibility
+
+    let data;
+
+    try {
+
+      data = JSON.parse(entry.getData().toString('utf-8'));
+
+    } catch (parseErr) {
+
+      return res.status(500).json({ error: 'Failed to parse existing project metadata' });
+
+    }
+
+
+
     data.visibility = 'visible';
 
-    // Update DB
-    await pool.query('UPDATE projects SET data = $1 WHERE id = $2', [data, id]);
+
+
+    zip.deleteFile('data.json');
+
+    zip.addFile('data.json', Buffer.from(JSON.stringify(data, null, 2)));
+
+    zip.writeZip(filePath);
+
+
 
     res.json({ success: true, message: `Project ${id} visibility set to 'visible'` });
+
   } catch (err) {
-    console.error('Share project error:', err);
+
+    if (err.code === 'ENOENT') {
+
+      return res.status(404).json({ error: 'Project file not found' });
+
+    }
+
+    console.error('Share project error:', err.stack || err.message);
+
     return res.status(500).json({ error: 'Failed to share project' });
+
   }
+
 });
+
+
 
 module.exports = router;
