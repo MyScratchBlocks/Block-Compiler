@@ -6,7 +6,7 @@ const { Octokit } = require('@octokit/rest');
 const router = express.Router();
 
 // === CONFIG ===
-const GITHUB_TOKEN = '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'; // Use env in production
+const GITHUB_TOKEN = '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'; // Use env in production
 const REPO_OWNER = 'MyScratchBlocks';
 const REPO_NAME = 'Project-DB';
 const BRANCH = 'main';
