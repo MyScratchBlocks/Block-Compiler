@@ -7,7 +7,7 @@ const router = express.Router();
 
 // === CONFIG ===
 const GITHUB_TOKEN = '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';
-const REPO_OWNER = 'MyScratchBlocks';
+const REPO_OWNER = 'kRxZykRxZy';
 const REPO_NAME = 'Project-DB';
 const BRANCH = 'main';
 
