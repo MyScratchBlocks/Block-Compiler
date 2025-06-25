@@ -1,29 +1,73 @@
 const express = require('express');
+
+const fs = require('fs');
+
+const path = require('path');
+
+const AdmZip = require('adm-zip');
+
+
+
 const router = express.Router();
-const pool = require('./db'); // Your Neon DB pool connection
 
-router.get('/json/:id', async (req, res) => {
-  const id = parseInt(req.params.id);
+const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
 
-  if (isNaN(id)) {
+
+
+router.get('/json/:id', (req, res) => {
+
+  const { id } = req.params;
+
+
+
+  // Validate that ID is only digits
+
+  if (!/^\d+$/.test(id)) {
+
     return res.status(400).json({ error: 'Invalid project ID format' });
+
   }
+
+
+
+  const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
+
+
 
   try {
-    // Query project_json JSONB column from project_jsons table by project_id
-    const result = await pool.query('SELECT project_json FROM project_jsons WHERE project_id = $1', [id]);
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Project JSON not found' });
+    fs.accessSync(filePath, fs.constants.F_OK);
+
+
+
+    const zip = new AdmZip(filePath);
+
+    const projectJsonEntry = zip.getEntry('project.json');
+
+
+
+    if (!projectJsonEntry) {
+
+      return res.status(404).json({ error: 'project.json not found in archive' });
+
     }
 
-    const projectJson = result.rows[0].project_json;
+
+
+    const projectJson = JSON.parse(projectJsonEntry.getData().toString('utf-8'));
 
     res.json(projectJson);
+
   } catch (err) {
-    console.error('project.json read error:', err);
+
+    console.error('project.json read error:', err.stack || err.message);
+
     res.status(500).json({ error: 'Failed to read project.json' });
+
   }
+
 });
+
+
 
 module.exports = router;
