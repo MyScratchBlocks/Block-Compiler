@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const AdmZip = require('adm-zip'); // npm install adm-zip
-const { v4: uuidv4 } = require('uuid'); // npm install uuid
+const { v4: uuidv4 } = require('uuid'); // npm install uuid 2
 const router = express.Router();
 
 const PROJECTS_DIR = path.join(__dirname, '..', 'local_storage/uploads'); // Directory where .sb3 files are stored
