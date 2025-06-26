@@ -1,12 +1,12 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { Octokit } = require('@octokit/rest');
+const axios = require('axios');
 
 const router = express.Router();
 
 // === CONFIG ===
-const GITHUB_TOKEN = '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'; // Use env in production
+const GITHUB_TOKEN = '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'; // ⚠️ Use env in production
 const REPO_OWNER = 'MyScratchBlocks';
 const REPO_NAME = 'Project-DB';
 const BRANCH = 'main';
@@ -14,11 +14,13 @@ const BRANCH = 'main';
 const UPLOAD_DIR = path.join(__dirname, '..', 'local_storage', 'uploads');
 const ASSETS_DIR = path.join(__dirname, '..', 'local_storage', 'assets');
 
-if (!GITHUB_TOKEN) {
-  throw new Error('GITHUB_TOKEN environment variable not set!');
-}
-
-const octokit = new Octokit({ auth: GITHUB_TOKEN });
+const githubApi = axios.create({
+  baseURL: 'https://api.github.com',
+  headers: {
+    Authorization: `token ${GITHUB_TOKEN}`,
+    Accept: 'application/vnd.github.v3+json',
+  },
+});
 
 // === STATUS STORE ===
 let uploadStatus = {
@@ -38,15 +40,10 @@ function clearDirectory(dir) {
 
 async function getShaForFile(filePath) {
   try {
-    const res = await octokit.repos.getContent({
-      owner: REPO_OWNER,
-      repo: REPO_NAME,
-      path: filePath,
-      ref: BRANCH,
-    });
+    const res = await githubApi.get(`/repos/${REPO_OWNER}/${REPO_NAME}/contents/${filePath}?ref=${BRANCH}`);
     return res.data.sha;
   } catch (e) {
-    if (e.status === 404) return null;
+    if (e.response && e.response.status === 404) return null;
     throw e;
   }
 }
@@ -56,15 +53,14 @@ async function uploadFile(filePath, contentBuffer) {
   const content = contentBuffer.toString('base64');
   const sha = await getShaForFile(repoPath);
 
-  await octokit.repos.createOrUpdateFileContents({
-    owner: REPO_OWNER,
-    repo: REPO_NAME,
-    path: repoPath,
+  const payload = {
     message: `Upload ${repoPath}`,
     content,
     branch: BRANCH,
     ...(sha && { sha }),
-  });
+  };
+
+  await githubApi.put(`/repos/${REPO_OWNER}/${REPO_NAME}/contents/${repoPath}`, payload);
 
   console.log(`Uploaded: ${repoPath}`);
 }
@@ -74,6 +70,7 @@ async function walkAndUpload(dirPath, basePath = '') {
     console.warn(`Directory missing: ${dirPath}, skipping.`);
     return;
   }
+
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
 
   for (const entry of entries) {
@@ -95,31 +92,22 @@ async function walkAndUpload(dirPath, basePath = '') {
 
 async function downloadFromGitHub(repoPath, localDir) {
   try {
-    const { data } = await octokit.repos.getContent({
-      owner: REPO_OWNER,
-      repo: REPO_NAME,
-      path: repoPath,
-      ref: BRANCH,
-    });
+    const res = await githubApi.get(`/repos/${REPO_OWNER}/${REPO_NAME}/contents/${repoPath}?ref=${BRANCH}`);
+    const data = res.data;
 
-    if (Array.isArray(data)) {
-      fs.mkdirSync(localDir, { recursive: true });
-      for (const file of data) {
-        const fileRepoPath = path.posix.join(repoPath, file.name);
-        const localFilePath = path.join(localDir, file.name);
-        if (file.type === 'dir') {
-          await downloadFromGitHub(fileRepoPath, localFilePath);
-        } else {
-          const fileData = await octokit.repos.getContent({
-            owner: REPO_OWNER,
-            repo: REPO_NAME,
-            path: fileRepoPath,
-            ref: BRANCH,
-          });
-          const content = Buffer.from(fileData.data.content, 'base64');
-          fs.writeFileSync(localFilePath, content);
-          console.log(`Downloaded: ${fileRepoPath} → ${localFilePath}`);
-        }
+    fs.mkdirSync(localDir, { recursive: true });
+
+    for (const file of data) {
+      const fileRepoPath = path.posix.join(repoPath, file.name);
+      const localFilePath = path.join(localDir, file.name);
+
+      if (file.type === 'dir') {
+        await downloadFromGitHub(fileRepoPath, localFilePath);
+      } else {
+        const fileRes = await githubApi.get(`/repos/${REPO_OWNER}/${REPO_NAME}/contents/${fileRepoPath}?ref=${BRANCH}`);
+        const content = Buffer.from(fileRes.data.content, 'base64');
+        fs.writeFileSync(localFilePath, content);
+        console.log(`Downloaded: ${fileRepoPath} → ${localFilePath}`);
       }
     }
   } catch (err) {
