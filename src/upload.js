@@ -6,8 +6,8 @@ const axios = require('axios');
 const router = express.Router();
 
 // === CONFIG ===
-const GITHUB_TOKEN = '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'; // ⚠️ Use env in production
-const REPO_OWNER = 'MyScratchBlocks';
+const GITHUB_TOKEN = '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'; // ⚠️ Use env in production
+const REPO_OWNER = 'kRxZykRxZy';
 const REPO_NAME = 'Project-DB';
 const BRANCH = 'main';
 
