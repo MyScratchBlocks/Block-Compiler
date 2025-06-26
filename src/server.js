@@ -1,10 +1,6 @@
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
-const dotenv = require('dotenv');
-
-// Load environment variables
-dotenv.config();
 
 // Initialize Express
 const app = express();
@@ -31,7 +27,7 @@ const usersRouter = require('./users');
 
 
 // app.use(require('./hackv2'));
-app.use(require('./upload'));
+// app.use(require('./upload'));
 app.use(commentsRouter); // Comments
 app.use(projectsRoute);  // Projects
 app.use(usersRouter);       // Users
