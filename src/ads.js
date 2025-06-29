@@ -27,7 +27,8 @@ router.get('/ad/random', (req, res) => {
   }
 
   const randomIndex = Math.floor(Math.random() * ads.length);
-  res.status(200).json({ id: randomIndex, ad: ads[randomIndex] });
+  const selectedAd = ads[randomIndex];
+  res.status(200).json({ ad: `ad:${selectedAd}`, id: randomIndex }); 
 });
 
 module.exports = router;
