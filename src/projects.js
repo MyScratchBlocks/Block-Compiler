@@ -45,7 +45,7 @@ router.get('/api/projects', async (req, res) => {
           projects.push({
             id: data.id || projectId,
             name: data.title || 'Untitled',
-            image: THUMBNAIL_URL,
+            image: data.image || THUMBNAIL_URL,
             author: data.author?.username || 'Unknown User',
             link: `https://myscratchblocks.github.io/projects#${data.id || projectId}`
           });
