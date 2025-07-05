@@ -221,13 +221,9 @@ router.post('/api/upload/:id', (req, res) => {
 // GET image by ID
 router.get('/images/:id', (req, res) => {
   const { id } = req.params;
-  const extensions = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
-
-  for (const ext of extensions) {
-    const imagePath = path.join(LOCAL_UPLOAD_PATH, `${id}.${ext}`);
-    if (fs.existsSync(imagePath)) {
-      return res.sendFile(imagePath);
-    }
+  const imagePath = path.join(LOCAL_UPLOAD_PATH, `${id}`);
+  if (fs.existsSync(imagePath)) {
+    return res.sendFile(imagePath);
   }
 
   return res.status(404).json({ error: 'Image not found' });
