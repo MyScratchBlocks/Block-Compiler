@@ -1,26 +1,62 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const AdmZip = require('adm-zip'); // npm install adm-zip
-const { v4: uuidv4 } = require('uuid'); // npm install uuid
+const AdmZip = require('adm-zip');
+const { v4: uuidv4 } = require('uuid');
 const router = express.Router();
-const { addMessage } = require('./messages');
 
 const PROJECTS_DIR = path.join(__dirname, '..', 'local_storage/uploads');
 
-// Helper: Get full path to SB3 file
+// In-memory violation tracking
+const violations = {};
+
+const base64Words = [
+  'c2hpdA==', 'ZnVjaw==', 'ZGFtbg==', 'Yml0Y2g=', 'YXNzaG9sZQ==', 'Y3VudA==',
+  'bmlnZ2Vy', 'ZmFn', 'ZGljaw==', 'Y29jaw==', 'cHVzc3k=', 'cmV0YXJk'
+];
+const badWords = base64Words.map(w => Buffer.from(w, 'base64').toString('utf8'));
+
+function getWeekKey() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 1);
+  const days = Math.floor((now - start) / 86400000);
+  return `${now.getFullYear()}-W${Math.ceil((days + start.getDay() + 1) / 7)}`;
+}
+
+function getBanDuration(strikes) {
+  const mins = [5, 10, 15, 30, 60, 180];
+  return (mins[Math.min(strikes - 1, mins.length - 1)]) * 60 * 1000;
+}
+
+function isUserBanned(username) {
+  const now = Date.now();
+  const entry = violations[username];
+  if (!entry || entry.week !== getWeekKey()) return false;
+  return now - entry.lastViolation < getBanDuration(entry.strikes);
+}
+
+function registerViolation(username) {
+  const now = Date.now();
+  const week = getWeekKey();
+  const entry = violations[username];
+  if (!entry || entry.week !== week) {
+    violations[username] = { strikes: 1, lastViolation: now, week };
+  } else {
+    entry.strikes += 1;
+    entry.lastViolation = now;
+  }
+}
+
 function getProjectPath(projectId) {
   return path.join(PROJECTS_DIR, `${projectId}.sb3`);
 }
 
-// Helper: Read comments from SB3
 function readCommentsFromSb3(projectPath) {
   try {
     const zip = new AdmZip(projectPath);
     const entry = zip.getEntry('comments.json');
     if (entry) {
-      const data = zip.readAsText(entry);
-      return JSON.parse(data);
+      return JSON.parse(zip.readAsText(entry));
     }
   } catch (e) {
     console.error('Error reading comments:', e);
@@ -28,10 +64,9 @@ function readCommentsFromSb3(projectPath) {
   return [];
 }
 
-// Helper: Write comments into SB3
 function writeCommentsToSb3(projectPath, comments) {
   const zip = new AdmZip(projectPath);
-  zip.deleteFile('comments.json'); // Remove old comments file
+  zip.deleteFile('comments.json');
   zip.addFile('comments.json', Buffer.from(JSON.stringify(comments, null, 2)));
   zip.writeZip(projectPath);
 }
@@ -52,6 +87,7 @@ router.get('/:projectId/comments', (req, res) => {
 // POST new comment
 router.post('/:projectId/comments', (req, res) => {
   const { text, user } = req.body;
+  const username = user?.username || 'Anonymous';
   const projectId = req.params.projectId;
   const projectPath = getProjectPath(projectId);
 
@@ -59,97 +95,69 @@ router.post('/:projectId/comments', (req, res) => {
     return res.status(404).json({ error: 'Project not found' });
   }
 
+  if (isUserBanned(username)) {
+    return res.status(403).json({ error: 'You are temporarily banned from commenting due to previous violations.' });
+  }
+
+  const isSwearing = badWords.some(word => new RegExp(`\\b${word}\\b`, 'i').test(text));
+  if (isSwearing) {
+    registerViolation(username);
+    return res.status(400).json({ error: 'Inappropriate language detected. You are now temporarily banned.' });
+  }
+
   const comments = readCommentsFromSb3(projectPath);
-  const idP = uuidv4();
   const newComment = {
-    id: idP,
+    id: uuidv4(),
     projectId,
     text,
     createdAt: new Date().toISOString(),
-    user: user?.username || 'Anonymous',
+    user: username,
     replies: []
   };
 
   comments.push(newComment);
   writeCommentsToSb3(projectPath, comments);
-
-  try {
-    const zip = new AdmZip(projectPath);
-    const dataEntry = zip.getEntry('data.json');
-    if (dataEntry) {
-      const dataStr = zip.readAsText(dataEntry);
-      const json = JSON.parse(dataStr);
-      const projectAuthor = json.author?.username;
-
-      if (projectAuthor) {
-        addMessage(
-          projectAuthor,
-          `${user?.username || 'Someone'} posted on your project: <a href="/projects/#${json.id}">${json.title}</a>. View comment here: <a href="/projects/#${json.id}?comment=${idP}">Comment</a>`
-        );
-      }
-    }
-  } catch (e) {
-    console.error('Error notifying user:', e);
-  }
-
-  res.status(201).json({ success: true });
+  res.status(201).json(newComment);
 });
 
-// POST reply to a comment
+// POST reply to comment
 router.post('/:projectId/comments/:commentId/reply', (req, res) => {
   const { text, user } = req.body;
-  const { projectId, commentId } = req.params;
+  const username = user?.username || 'Anonymous';
+  const projectId = req.params.projectId;
+  const commentId = req.params.commentId;
   const projectPath = getProjectPath(projectId);
 
   if (!fs.existsSync(projectPath)) {
     return res.status(404).json({ error: 'Project not found' });
   }
 
-  const comments = readCommentsFromSb3(projectPath);
-
-  function addReplyRecursive(commentList) {
-    for (const comment of commentList) {
-      if (comment.id === commentId) {
-        comment.replies = comment.replies || [];
-        comment.replies.push({
-          id: uuidv4(),
-          text,
-          createdAt: new Date().toISOString(),
-          user: { username: user?.username || 'Anonymous' }
-        });
-        return true;
-      }
-      if (comment.replies && addReplyRecursive(comment.replies)) return true;
-    }
-    return false;
+  if (isUserBanned(username)) {
+    return res.status(403).json({ error: 'You are temporarily banned from commenting due to previous violations.' });
   }
 
-  if (!addReplyRecursive(comments)) {
+  const isSwearing = badWords.some(word => new RegExp(`\\b${word}\\b`, 'i').test(text));
+  if (isSwearing) {
+    registerViolation(username);
+    return res.status(400).json({ error: 'Inappropriate language detected. You are now temporarily banned.' });
+  }
+
+  const comments = readCommentsFromSb3(projectPath);
+  const comment = comments.find(c => c.id === commentId);
+  if (!comment) {
     return res.status(404).json({ error: 'Comment not found' });
   }
 
+  const reply = {
+    id: uuidv4(),
+    text,
+    createdAt: new Date().toISOString(),
+    user: username
+  };
+
+  comment.replies.push(reply);
   writeCommentsToSb3(projectPath, comments);
-
-  try {
-    const zip = new AdmZip(projectPath);
-    const dataEntry = zip.getEntry('data.json');
-    if (dataEntry) {
-      const dataStr = zip.readAsText(dataEntry);
-      const json = JSON.parse(dataStr);
-      const projectAuthor = json.author?.username;
-
-      if (projectAuthor) {
-        addMessage(
-          projectAuthor,
-          `${user?.username || 'Someone'} replied to a comment on your project: <a href="/projects/#${projectId}">${json.title}</a>. View comment here: <a href="/projects/#${json.id}?comment=${commentId}">Comment</a>`
-        );
-      }
-    }
-  } catch (e) {
-    console.error('Error notifying user:', e);
-  }
-
-  res.status(201).json({ success: true });
+  res.status(201).json(reply);
 });
 
 module.exports = router;
