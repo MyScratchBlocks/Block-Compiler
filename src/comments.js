@@ -4,6 +4,7 @@ const path = require('path');
 const AdmZip = require('adm-zip'); // npm install adm-zip
 const { v4: uuidv4 } = require('uuid'); // npm install uuid 2
 const router = express.Router();
+const { addMessage } = require('./messages');
 
 const PROJECTS_DIR = path.join(__dirname, '..', 'local_storage/uploads'); // Directory where .sb3 files are stored
 
@@ -70,6 +71,12 @@ router.post('/:projectId/comments', (req, res) => {
 
   comments.push(newComment);
   writeCommentsToSb3(projectPath, comments);
+  const zip2 = new AdmZip(projectPath);
+  const data = zip2.getEntry('data.json');
+  const data2 = zip2.readAsText(data);
+  const json = JSON.parse(data2);
+  const user = json.author?.username;
+  addMessage(user, `${req.body.user?.username} posted on your project: ${json.title}. View comment here: <a href="/projects/#${json.id}">Comment</a>`);
 
   res.status(201).json({ success: true });
 });
