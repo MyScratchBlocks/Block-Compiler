@@ -1,15 +1,15 @@
 const express = require('express');
 const router = express.Router();
 
-let messages = {};
+const messages = {};
 
 router.get('/users/:user/messages', (req, res) => {
   res.json({ messages: messages[req.params.user] || [] });
 });
 
-const addMessage = function (user, message) {
-  if (!messages[user]) messages[user] = [];
+function addMessage(user, message) {
+  messages[user] = messages[user] || [];
   messages[user].push(message);
-};
+}
 
 module.exports = { addMessage, router };
