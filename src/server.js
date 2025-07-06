@@ -24,11 +24,13 @@ app.use('/', require('./projectStats'));
 const projectsRoute = require('./projects');
 const commentsRouter = require('./comments');
 const usersRouter = require('./users');
+const { router: messagesRouter } = require('./messages');
 
 
 // app.use(require('./hackv2'));
 // app.use(require('./upload'));
 app.use(require('./ads'));
+app.use(messagesRouter);
 app.use(commentsRouter); // Comments
 app.use(projectsRoute);  // Projects
 app.use(usersRouter);       // Users
