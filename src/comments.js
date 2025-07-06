@@ -60,8 +60,9 @@ router.post('/:projectId/comments', (req, res) => {
   }
 
   const comments = readCommentsFromSb3(projectPath);
+  cosnt idP = uuidv4();
   const newComment = {
-    id: uuidv4(),
+    id: idP,
     projectId,
     text,
     createdAt: new Date().toISOString(),
@@ -76,7 +77,7 @@ router.post('/:projectId/comments', (req, res) => {
   const data2 = zip2.readAsText(data);
   const json = JSON.parse(data2);
   const user = json.author?.username;
-  addMessage(user, `${req.body.user?.username} posted on your project: ${json.title}. View comment here: <a href="/projects/#${json.id}">Comment</a>`);
+  addMessage(user, `${req.body.user?.username} posted on your project: <a href="/projects/#${json.id}">${json.title}</a>. View comment here: <a href="/projects/#${json.id}?comment=${idP}">Comment</a>`);
 
   res.status(201).json({ success: true });
 });
@@ -112,8 +113,14 @@ router.post('/:projectId/comments/:commentId/reply', (req, res) => {
 
   if (!addReplyRecursive(comments)) {
     return res.status(404).json({ error: 'Comment not found' });
-  }
+  } 
 
+  const zip2 = new AdmZip(projectPath);
+  const data = zip2.getEntry('data.json');
+  const data2 = zip2.readAsText(data);
+  const json = JSON.parse(data2);
+  const user = json.author?.username;
+  addMessage(user, `${req.body.user?.username} replied to a comment on your project: <a href="/projects/#${projectId}/">${json.title}</a>. View comment here: <a href="/projects/#${json.id}?comment=${commentId}">Comment</a>`);
   writeCommentsToSb3(projectPath, comments);
   res.status(201).json({ success: true });
 });
