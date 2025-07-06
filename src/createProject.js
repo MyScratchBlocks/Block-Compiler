@@ -90,7 +90,7 @@ router.post('/', async (req, res) => {
 
       },
 
-      image: `local_assets/${fileNum}_480x360.png`,
+      image: `https://myscratchblocks.github.io/images/No%20Cover%20Available.png`,
 
       images: {},
 
