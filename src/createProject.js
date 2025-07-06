@@ -225,6 +225,7 @@ router.post('/remix/:id', (req, res) => {
     newDataJson.history.modified = new Date().toISOString();
     newDataJson.history.shared = new Date().toISOString();
     newDataJson.stats.views = 0;
+    newDataJson.visibility = 'unshared',
     newDataJson.stats.loves = 0;
     newDataJson.stats.favorites = 0;
     newDataJson.stats.remixes = 0;
@@ -279,7 +280,7 @@ router.post('/remix/:id', (req, res) => {
         newZip.addFile('project.json', Buffer.from(JSON.stringify(newProjectJson, null, 2)));
       } else if (entry.entryName === 'comments.json') {
         // Copy comments.json as is
-        newZip.addFile('comments.json', originZip.readFile(entry));
+        newZip.addFile('comments.json', Buffer.from('[]'));
       } else {
         // For other files (likely asset files)
         const originalName = entry.entryName;
