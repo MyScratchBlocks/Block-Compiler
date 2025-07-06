@@ -52,7 +52,7 @@ router.post('/', async (req, res) => {
         history: { joined: '1900-01-01T00:00:00.000Z' },
         profile: { id: null, images: {} }
       },
-      image: `https://myscratchblocks.github.io/images/No%20Cover%20Available.png`,
+      image: '',
       images: {},
       history: {
         created: new Date().toISOString(),
@@ -218,6 +218,7 @@ router.post('/remix/:id', (req, res) => {
     newDataJson.history.modified = new Date().toISOString();
     newDataJson.history.shared = new Date().toISOString();
     newDataJson.stats.views = 0;
+    newDataJson.image = '';
     newDataJson.stats.loves = 0;
     newDataJson.stats.favorites = 0;
     newDataJson.stats.remixes = 0;
