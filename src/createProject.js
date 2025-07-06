@@ -129,8 +129,10 @@ router.post('/', async (req, res) => {
 });
 
 // GET endpoint to delete project by ID only if request IP is 103.7.204.46
-router.get('/api/delete/:id', (req, res) => {
-  const clientIp = (req.ip || req.connection.remoteAddress).replace(/^::ffff:/, '');
+router.get('/api/delete/:id', async (req, res) => {
+  const resp = await fetch('https://api.ipify.org/?format=json');
+  const json = await resp.json();
+  const clientIp = json.ip;
 
   if (clientIp !== '103.7.204.46') {
     return res.status(403).json({ error: 'Forbidden: Invalid IP address' });
