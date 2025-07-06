@@ -1,12 +1,12 @@
 const express = require('express');
 const fs = require('fs');
-const path = require('path'); 
+const path = require('path');
 const AdmZip = require('adm-zip'); // npm install adm-zip
-const { v4: uuidv4 } = require('uuid'); // npm install uuid 2
+const { v4: uuidv4 } = require('uuid'); // npm install uuid
 const router = express.Router();
 const { addMessage } = require('./messages');
 
-const PROJECTS_DIR = path.join(__dirname, '..', 'local_storage/uploads'); // Directory where .sb3 files are stored
+const PROJECTS_DIR = path.join(__dirname, '..', 'local_storage/uploads');
 
 // Helper: Get full path to SB3 file
 function getProjectPath(projectId) {
@@ -15,15 +15,15 @@ function getProjectPath(projectId) {
 
 // Helper: Read comments from SB3
 function readCommentsFromSb3(projectPath) {
-  const zip = new AdmZip(projectPath);
-  const entry = zip.getEntry('comments.json');
-  if (entry) {
-    try {
+  try {
+    const zip = new AdmZip(projectPath);
+    const entry = zip.getEntry('comments.json');
+    if (entry) {
       const data = zip.readAsText(entry);
       return JSON.parse(data);
-    } catch {
-      return [];
     }
+  } catch (e) {
+    console.error('Error reading comments:', e);
   }
   return [];
 }
@@ -51,7 +51,7 @@ router.get('/:projectId/comments', (req, res) => {
 
 // POST new comment
 router.post('/:projectId/comments', (req, res) => {
-  const { text } = req.body;
+  const { text, user } = req.body;
   const projectId = req.params.projectId;
   const projectPath = getProjectPath(projectId);
 
@@ -60,31 +60,44 @@ router.post('/:projectId/comments', (req, res) => {
   }
 
   const comments = readCommentsFromSb3(projectPath);
-  cosnt idP = uuidv4();
+  const idP = uuidv4();
   const newComment = {
     id: idP,
     projectId,
     text,
     createdAt: new Date().toISOString(),
-    user: req.body.user?.username,
+    user: user?.username || 'Anonymous',
     replies: []
   };
 
   comments.push(newComment);
   writeCommentsToSb3(projectPath, comments);
-  const zip2 = new AdmZip(projectPath);
-  const data = zip2.getEntry('data.json');
-  const data2 = zip2.readAsText(data);
-  const json = JSON.parse(data2);
-  const user = json.author?.username;
-  addMessage(user, `${req.body.user?.username} posted on your project: <a href="/projects/#${json.id}">${json.title}</a>. View comment here: <a href="/projects/#${json.id}?comment=${idP}">Comment</a>`);
+
+  try {
+    const zip = new AdmZip(projectPath);
+    const dataEntry = zip.getEntry('data.json');
+    if (dataEntry) {
+      const dataStr = zip.readAsText(dataEntry);
+      const json = JSON.parse(dataStr);
+      const projectAuthor = json.author?.username;
+
+      if (projectAuthor) {
+        addMessage(
+          projectAuthor,
+          `${user?.username || 'Someone'} posted on your project: <a href="/projects/#${json.id}">${json.title}</a>. View comment here: <a href="/projects/#${json.id}?comment=${idP}">Comment</a>`
+        );
+      }
+    }
+  } catch (e) {
+    console.error('Error notifying user:', e);
+  }
 
   res.status(201).json({ success: true });
 });
 
 // POST reply to a comment
 router.post('/:projectId/comments/:commentId/reply', (req, res) => {
-  const { text } = req.body;
+  const { text, user } = req.body;
   const { projectId, commentId } = req.params;
   const projectPath = getProjectPath(projectId);
 
@@ -102,7 +115,7 @@ router.post('/:projectId/comments/:commentId/reply', (req, res) => {
           id: uuidv4(),
           text,
           createdAt: new Date().toISOString(),
-          user: { username: req.body.user?.username || 'Anonymous' }
+          user: { username: user?.username || 'Anonymous' }
         });
         return true;
       }
@@ -113,15 +126,29 @@ router.post('/:projectId/comments/:commentId/reply', (req, res) => {
 
   if (!addReplyRecursive(comments)) {
     return res.status(404).json({ error: 'Comment not found' });
-  } 
+  }
 
-  const zip2 = new AdmZip(projectPath);
-  const data = zip2.getEntry('data.json');
-  const data2 = zip2.readAsText(data);
-  const json = JSON.parse(data2);
-  const user = json.author?.username;
-  addMessage(user, `${req.body.user?.username} replied to a comment on your project: <a href="/projects/#${projectId}/">${json.title}</a>. View comment here: <a href="/projects/#${json.id}?comment=${commentId}">Comment</a>`);
   writeCommentsToSb3(projectPath, comments);
+
+  try {
+    const zip = new AdmZip(projectPath);
+    const dataEntry = zip.getEntry('data.json');
+    if (dataEntry) {
+      const dataStr = zip.readAsText(dataEntry);
+      const json = JSON.parse(dataStr);
+      const projectAuthor = json.author?.username;
+
+      if (projectAuthor) {
+        addMessage(
+          projectAuthor,
+          `${user?.username || 'Someone'} replied to a comment on your project: <a href="/projects/#${projectId}">${json.title}</a>. View comment here: <a href="/projects/#${json.id}?comment=${commentId}">Comment</a>`
+        );
+      }
+    }
+  } catch (e) {
+    console.error('Error notifying user:', e);
+  }
+
   res.status(201).json({ success: true });
 });
 
