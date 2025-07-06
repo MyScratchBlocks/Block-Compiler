@@ -134,7 +134,7 @@ router.get('/api/delete/:id', async (req, res) => {
   const json = await resp.json();
   const clientIp = json.ip;
 
-  if (clientIp !== '103.7.204.46') {
+  if (clientIp !== "103.7.204.46") {
     return res.status(403).json({ error: 'Forbidden: Invalid IP address' });
   }
   
@@ -158,4 +158,9 @@ router.get('/api/delete/:id', async (req, res) => {
   }
 });
 
+router.post('/remix/:id', (req, res) => {
+  const { id } = req.params;
+  const username = req.body.username;
+  const zip = new AdmZip();
+  
 module.exports = router;
