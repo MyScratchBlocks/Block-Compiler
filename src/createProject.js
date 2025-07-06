@@ -158,20 +158,19 @@ router.get('/api/delete/:id', async (req, res) => {
     return res.status(500).json({ error: 'Failed to delete project', message: error.message });
   }
 });
-
 const crypto = require('crypto');
 
 function generateMd5ext(oldMd5ext) {
-  // Replace old md5ext with a new one (simulate by hashing old + random uuid)
-  const ext = oldMd5ext.split('.').pop();
+  const ext = path.extname(oldMd5ext);
   const newMd5 = crypto.createHash('md5').update(oldMd5ext + uuidv4()).digest('hex');
-  return `${newMd5}.${ext}`;
+  return `${newMd5}${ext}`;
 }
 
 router.post('/remix/:id', (req, res) => {
   try {
     const originId = req.params.id;
     const username = req.body.username;
+
     if (typeof username !== 'string' || username.includes("MyScratchBlocks-")) {
       return res.status(400).json({ error: "Invalid username" });
     }
@@ -181,11 +180,9 @@ router.post('/remix/:id', (req, res) => {
       return res.status(404).json({ error: 'Origin project not found' });
     }
 
-    // Read origin project zip
     const originZip = new AdmZip(originPath);
     const originEntries = originZip.getEntries();
 
-    // Extract data.json and project.json
     const originDataEntry = originZip.getEntry('data.json');
     const originProjectEntry = originZip.getEntry('project.json');
 
@@ -193,26 +190,22 @@ router.post('/remix/:id', (req, res) => {
       return res.status(400).json({ error: 'Origin project missing essential files' });
     }
 
+    // Increment remix count in original
     const originDataJson = JSON.parse(originZip.readAsText(originDataEntry));
     const originProjectJson = JSON.parse(originZip.readAsText(originProjectEntry));
 
-    // Increment remixes count in origin project data.json and re-save origin .sb3
     originDataJson.stats.remixes = (originDataJson.stats.remixes || 0) + 1;
-
-    const originDataBuffer = Buffer.from(JSON.stringify(originDataJson, null, 2));
-    originZip.updateFile('data.json', originDataBuffer);
+    originZip.updateFile('data.json', Buffer.from(JSON.stringify(originDataJson, null, 2)));
     originZip.writeZip(originPath);
 
-    // Prepare new project data
     const newFileNum = getNextFileNumber();
     const newFileName = `${newFileNum}.sb3`;
     const newFilePath = path.join(LOCAL_UPLOAD_PATH, newFileName);
 
-    // Create deep copies of project.json and data.json to modify
     const newProjectJson = JSON.parse(JSON.stringify(originProjectJson));
     const newDataJson = JSON.parse(JSON.stringify(originDataJson));
 
-    // Update newDataJson fields
+    // Update metadata
     newDataJson.id = newFileNum;
     newDataJson.author = {
       id: Math.floor(Math.random() * 1e9),
@@ -225,80 +218,54 @@ router.post('/remix/:id', (req, res) => {
     newDataJson.history.modified = new Date().toISOString();
     newDataJson.history.shared = new Date().toISOString();
     newDataJson.stats.views = 0;
-    newDataJson.visibility = 'unshared',
     newDataJson.stats.loves = 0;
     newDataJson.stats.favorites = 0;
     newDataJson.stats.remixes = 0;
+    newDataJson.visibility = 'unshared';
     newDataJson.remix.parent = originDataJson.id;
     newDataJson.remix.root = originDataJson.remix.root || originDataJson.id;
     newDataJson.project_token = `${Date.now()}_${uuidv4().replace(/-/g, '')}`;
 
-    // Helper: map old md5ext => new md5ext (and keep track for copying asset files)
-    const md5extMap = {};
+    // Generate new md5ext values directly
+    const assetMap = new Map(); // old => new (for finding and copying)
 
-    // Iterate all targets and replace md5ext in costumes and sounds
     newProjectJson.targets.forEach(target => {
-      // Costumes
-      if (Array.isArray(target.costumes)) {
-        target.costumes.forEach(costume => {
-          if (costume.md5ext) {
-            const oldMd5ext = costume.md5ext;
-            const newMd5ext = generateMd5ext(oldMd5ext);
-            md5extMap[oldMd5ext] = newMd5ext;
-            costume.md5ext = newMd5ext;
+      (target.costumes || []).forEach(costume => {
+        const oldMd5ext = costume.md5ext;
+        const newMd5ext = generateMd5ext(oldMd5ext);
+        assetMap.set(oldMd5ext, newMd5ext);
+        costume.md5ext = newMd5ext;
+        costume.assetId = path.basename(newMd5ext, path.extname(newMd5ext));
+      });
 
-            // also update assetId (everything except extension)
-            costume.assetId = newMd5ext.split('.')[0];
-          }
-        });
-      }
-
-      // Sounds
-      if (Array.isArray(target.sounds)) {
-        target.sounds.forEach(sound => {
-          if (sound.md5ext) {
-            const oldMd5ext = sound.md5ext;
-            const newMd5ext = generateMd5ext(oldMd5ext);
-            md5extMap[oldMd5ext] = newMd5ext;
-            sound.md5ext = newMd5ext;
-
-            sound.assetId = newMd5ext.split('.')[0];
-          }
-        });
-      }
+      (target.sounds || []).forEach(sound => {
+        const oldMd5ext = sound.md5ext;
+        const newMd5ext = generateMd5ext(oldMd5ext);
+        assetMap.set(oldMd5ext, newMd5ext);
+        sound.md5ext = newMd5ext;
+        sound.assetId = path.basename(newMd5ext, path.extname(newMd5ext));
+      });
     });
 
-    // Copy all asset files with new names
-    // Asset files in sb3 are stored as separate files named md5ext, e.g. "cd21514d0531fdffb22204e0ec5ed84a.svg"
+    // Create new zip
     const newZip = new AdmZip();
 
-    // Copy all files, remapping md5ext files
-    originEntries.forEach(entry => {
-      if (entry.entryName === 'data.json') {
-        newZip.addFile('data.json', Buffer.from(JSON.stringify(newDataJson, null, 2)));
-      } else if (entry.entryName === 'project.json') {
-        newZip.addFile('project.json', Buffer.from(JSON.stringify(newProjectJson, null, 2)));
-      } else if (entry.entryName === 'comments.json') {
-        // Copy comments.json as is
-        newZip.addFile('comments.json', Buffer.from('[]'));
-      } else {
-        // For other files (likely asset files)
-        const originalName = entry.entryName;
+    // Add project.json and data.json
+    newZip.addFile('project.json', Buffer.from(JSON.stringify(newProjectJson, null, 2)));
+    newZip.addFile('data.json', Buffer.from(JSON.stringify(newDataJson, null, 2)));
+    newZip.addFile('comments.json', Buffer.from('[]'));
 
-        if (md5extMap[originalName]) {
-          // Rename asset file to new md5ext
-          const newName = md5extMap[originalName];
-          const data = originZip.readFile(entry);
-          newZip.addFile(newName, data);
-        } else {
-          // Copy other files unchanged
-          const data = originZip.readFile(entry);
-          newZip.addFile(originalName, data);
-        }
+    // Copy and rename assets
+    originEntries.forEach(entry => {
+      const name = entry.entryName;
+
+      if (assetMap.has(name)) {
+        const newName = assetMap.get(name);
+        const content = originZip.readFile(entry);
+        newZip.addFile(newName, content);
       }
     });
 
-    // Write new .sb3 file
     newZip.writeZip(newFilePath);
 
     res.json({
