@@ -26,8 +26,7 @@
     "winston": "^3.17.0",
     "winston-daily-rotate-file": "^5.0.0",
     "ws": "^8.18.2",
-    "@octokit/rest": "^20.0.0",
-    "node-fetch": "^3.4.0"
+    "@octokit/rest": "^20.0.0"
   },
   "devDependencies": {
     "@types/finalhandler": "^1.1.0",
