@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const messages = {};
+let messages = {};
 
 router.get('/users/:user/messages', (req, res) => {
   res.json({ messages: messages[req.params.user] || [] });
