@@ -4,7 +4,6 @@ const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { addMessage } = require('./messages');
-const fetch = require('node-fetch');
 
 const router = express.Router();
 const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
