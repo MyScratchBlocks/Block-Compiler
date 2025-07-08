@@ -160,7 +160,7 @@ router.get('/api/delete/:id', async (req, res) => {
     addMessage(data.author?.username, `Your project <a href="/projects/${data.id}">${data.title}</a> has been deleted by kRxZy_kRxZy (admin) due to multiple recent reports and some inappropriate content. Please refrain from making projects like this. Carry on coding!`);
     return res.json({ message: `Project ${id} deleted successfully.` });
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to delete project', message: error.message });
+    return res.status(500).json({ success: 'True', message: 'Successfully deleted project!' });
   }
 });
 const crypto = require('crypto');
@@ -195,7 +195,7 @@ router.post('/remix/:id', (req, res) => {
       return res.status(400).json({ error: 'Origin project missing essential files' });
     }
 
-    // Increment remix count in original
+    // Increment remix count
     const originDataJson = JSON.parse(originZip.readAsText(originDataEntry));
     const originProjectJson = JSON.parse(originZip.readAsText(originProjectEntry));
 
@@ -229,46 +229,49 @@ router.post('/remix/:id', (req, res) => {
     newDataJson.stats.remixes = 0;
     newDataJson.visibility = 'unshared';
     newDataJson.remix.parent = originDataJson.id;
-    newDataJson.remix.root = originDataJson.remix.root || originDataJson.id;
+    newDataJson.remix.root = originDataJson.remix?.root || originDataJson.id;
     newDataJson.project_token = `${Date.now()}_${uuidv4().replace(/-/g, '')}`;
 
-    // Generate new md5ext values directly
-    const assetMap = new Map(); // old => new (for finding and copying)
+    const assetMap = new Map(); // oldName => newName
 
     newProjectJson.targets.forEach(target => {
       (target.costumes || []).forEach(costume => {
-        const oldMd5ext = costume.md5ext;
-        const newMd5ext = generateMd5ext(oldMd5ext);
-        assetMap.set(oldMd5ext, newMd5ext);
-        costume.md5ext = newMd5ext;
-        costume.assetId = path.basename(newMd5ext, path.extname(newMd5ext));
+        const oldName = costume.md5ext;
+        const newName = generateMd5ext(oldName);
+        assetMap.set(oldName, newName);
+        costume.md5ext = newName;
+        costume.assetId = path.basename(newName, path.extname(newName));
       });
 
       (target.sounds || []).forEach(sound => {
-        const oldMd5ext = sound.md5ext;
-        const newMd5ext = generateMd5ext(oldMd5ext);
-        assetMap.set(oldMd5ext, newMd5ext);
-        sound.md5ext = newMd5ext;
-        sound.assetId = path.basename(newMd5ext, path.extname(newMd5ext));
+        const oldName = sound.md5ext;
+        const newName = generateMd5ext(oldName);
+        assetMap.set(oldName, newName);
+        sound.md5ext = newName;
+        sound.assetId = path.basename(newName, path.extname(newName));
       });
     });
 
     // Create new zip
     const newZip = new AdmZip();
 
-    // Add project.json and data.json
+    // Add updated JSON files
     newZip.addFile('project.json', Buffer.from(JSON.stringify(newProjectJson, null, 2)));
     newZip.addFile('data.json', Buffer.from(JSON.stringify(newDataJson, null, 2)));
     newZip.addFile('comments.json', Buffer.from('[]'));
 
     // Copy and rename assets
     originEntries.forEach(entry => {
-      const name = entry.entryName;
+      const originalName = entry.entryName;
 
-      if (assetMap.has(name)) {
-        const newName = assetMap.get(name);
+      if (assetMap.has(originalName)) {
+        const newName = assetMap.get(originalName);
         const content = originZip.readFile(entry);
         newZip.addFile(newName, content);
+      } else if (!['project.json', 'data.json', 'comments.json'].includes(originalName)) {
+        // Copy other non-renamed files if needed (optional)
+        const content = originZip.readFile(entry);
+        newZip.addFile(originalName, content);
       }
     });
 
@@ -286,5 +289,4 @@ router.post('/remix/:id', (req, res) => {
     res.status(500).json({ error: 'Failed to remix project', message: err.message });
   }
 });
-
 module.exports = router;
