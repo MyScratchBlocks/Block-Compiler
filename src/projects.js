@@ -11,9 +11,8 @@ const THUMBNAIL_URL = 'https://myscratchblocks.github.io/images/No%20Cover%20Ava
 // GET /api/projects
 router.get('/api/projects', async (req, res) => {
   try {
-    // Verify the uploads directory exists
     try {
-      await fs.access(LOCAL_UPLOAD_DIR);
+      await fs.access(LOCAL_UPLOAD_DIR, fs.constants.F_OK);
     } catch (dirError) {
       if (dirError.code === 'ENOENT') {
         return res.status(404).json({ error: 'Upload directory not found' });
@@ -21,49 +20,62 @@ router.get('/api/projects', async (req, res) => {
       throw dirError;
     }
 
-    // Read and filter .sb3 files
     const files = await fs.readdir(LOCAL_UPLOAD_DIR);
     const sb3Files = files.filter(file => file.toLowerCase().endsWith('.sb3'));
 
-    const projects = await Promise.all(sb3Files.map(async (file) => {
+    const projectPromises = sb3Files.map(async (file) => {
       const filePath = path.join(LOCAL_UPLOAD_DIR, file);
       const projectId = file.replace(/\.sb3$/i, '');
 
       try {
         const zip = new AdmZip(filePath);
-        const dataEntry = zip.getEntry('data.json');
-        if (!dataEntry) {
+        const entry = zip.getEntry('data.json');
+
+        if (!entry) {
           console.warn(`[WARN] Missing data.json in ${file}`);
           return null;
         }
 
         let data;
         try {
-          const rawData = dataEntry.getData().toString('utf8');
+          const rawData = entry.getData().toString('utf8');
           data = JSON.parse(rawData);
         } catch (parseError) {
           console.warn(`[WARN] Failed to parse data.json in ${file}: ${parseError.message}`);
           return null;
         }
 
-        if (data.visibility === 'unshared') return null;
+        if (data.visibility !== 'unshared') {
+          const favourites = Number(data.stats?.favourites || 0);
+          const loves = Number(data.stats?.loves || 0);
+          const popularity = favourites + loves;
 
-        return {
-          id: data.id || projectId,
-          name: data.title || 'Untitled',
-          image: data.image || THUMBNAIL_URL,
-          author: data.author?.username || 'Unknown User',
-          link: `https://myscratchblocks.github.io/projects#${data.id || projectId}`
-        };
+          return {
+            id: data.id || projectId,
+            name: data.title || 'Untitled',
+            image: data.image || THUMBNAIL_URL,
+            author: data.author?.username || 'Unknown User',
+            link: `https://myscratchblocks.github.io/projects#${data.id || projectId}`,
+            popularity
+          };
+        }
+        return null;
       } catch (zipError) {
-        console.warn(`[WARN] Failed to process ${file}: ${zipError.message}`);
+        console.warn(`[WARN] Skipping ${file} due to error: ${zipError.message}`);
         return null;
       }
-    }));
+    });
 
-    const visibleProjects = projects.filter(Boolean);
-    res.json({ projects: visibleProjects });
+    const results = await Promise.all(projectPromises);
+    const filteredProjects = results.filter(project => project !== null);
 
+    // Sort by popularity (favourites + loves) in descending order
+    filteredProjects.sort((a, b) => b.popularity - a.popularity);
+
+    // Optional: remove the popularity field before sending response
+    const responseProjects = filteredProjects.map(({ popularity, ...rest }) => rest);
+
+    res.json({ projects: responseProjects });
   } catch (error) {
     console.error('[ERROR] Failed to fetch local projects:', error.message);
     res.status(500).json({ error: 'Failed to fetch local projects' });
