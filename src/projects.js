@@ -72,10 +72,8 @@ router.get('/api/projects', async (req, res) => {
     // Sort by popularity (favourites + loves) in descending order
     filteredProjects.sort((a, b) => b.popularity - a.popularity);
 
-    // Optional: remove the popularity field before sending response
-    const responseProjects = filteredProjects.map(({ popularity, ...rest }) => rest);
-
-    res.json({ projects: responseProjects });
+    // Return full list including popularity
+    res.json({ projects: filteredProjects });
   } catch (error) {
     console.error('[ERROR] Failed to fetch local projects:', error.message);
     res.status(500).json({ error: 'Failed to fetch local projects' });
