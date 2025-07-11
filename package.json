@@ -26,7 +26,8 @@
     "winston": "^3.17.0",
     "winston-daily-rotate-file": "^5.0.0",
     "ws": "^8.18.2",
-    "@octokit/rest": "^20.0.0"
+    "@octokit/rest": "^20.0.0",
+    "nodemailer": "^6.9.8"
   },
   "devDependencies": {
     "@types/finalhandler": "^1.1.0",
