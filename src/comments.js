@@ -145,7 +145,7 @@ router.post('/:projectId/comments', async (req, res) => {
       const entry = zip2.getEntry('data.json');
       const datab = zip2.readAsText(entry);
       const data = JSON.parse(datab);
-      addMessage(data.author?.username, `${username} commented on your project <a href="/projects/#${projectId}/">${data.title}</a>: ${text}`);
+      addMessage(data.author?.username, `${username} commented on your project <a href="/projects/#${projectId}">${data.title}</a>: ${text}`);
     } catch (e) {
       console.error('Notification error:', e.message);
     }
