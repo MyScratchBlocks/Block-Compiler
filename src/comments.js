@@ -21,7 +21,6 @@ const badWords = base64Words.map(w =>
   Buffer.from(w, 'base64').toString('utf8')
 );
 
-// Flexible regex like f.u.c.k or f u c k
 function generateSwearRegex(word) {
   const letters = word.split('').map(ch => `${ch}[\\W_]*`).join('');
   return new RegExp(`\\b${letters}\\b`, 'i');
@@ -143,10 +142,10 @@ router.post('/:projectId/comments', async (req, res) => {
   (async () => {
     try {
       const zip2 = new AdmZip(getProjectPath(projectId));
-      const entry zip2.getEntry('data.json');
+      const entry = zip2.getEntry('data.json');
       const datab = zip2.readAsText(entry);
       const data = JSON.parse(datab);
-      addMessage(author, `${username} commented on your project <a href="/projects/#${projectId}/">${data.title}</a>: ${text}`);
+      addMessage(data.author?.username, `${username} commented on your project <a href="/projects/#${projectId}/">${data.title}</a>: ${text}`);
     } catch (e) {
       console.error('Notification error:', e.message);
     }
