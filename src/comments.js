@@ -1,3 +1,4 @@
+const { addMessage } = require('./messages');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -85,7 +86,7 @@ router.get('/:projectId/comments', (req, res) => {
 });
 
 // POST new comment
-router.post('/:projectId/comments', (req, res) => {
+router.post('/:projectId/comments', async (req, res) => {
   const { text, user } = req.body;
   const username = user?.username || 'Anonymous';
   const projectId = req.params.projectId;
@@ -114,7 +115,10 @@ router.post('/:projectId/comments', (req, res) => {
     user: username,
     replies: []
   };
-
+  const res2 = await fetch(`http://localhost:5000/api/projects/${projectId}/meta/test123`);
+  const json2 = await res2.json();
+  const author = json2.author?.username;
+  addMessage(author, `${username} posted a comment on your project <a href="/projects/#${projectId}/">${json2.title}</a>: ${text}`);
   comments.push(newComment);
   writeCommentsToSb3(projectPath, comments);
   res.status(201).json(newComment);
@@ -154,7 +158,7 @@ router.post('/:projectId/comments/:commentId/reply', (req, res) => {
     createdAt: new Date().toISOString(),
     user: username
   };
-
+  
   comment.replies.push(reply);
   writeCommentsToSb3(projectPath, comments);
   res.status(201).json(reply);
