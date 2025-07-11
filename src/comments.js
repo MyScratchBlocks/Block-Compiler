@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 const AdmZip = require('adm-zip');
 const { v4: uuidv4 } = require('uuid');
-const axios = require('axios');
 const { addMessage } = require('./messages');
 const router = express.Router();
 
@@ -143,9 +142,10 @@ router.post('/:projectId/comments', async (req, res) => {
   // Notify author (non-blocking)
   (async () => {
     try {
-      const response = await axios.get(`http://localhost:5000/api/projects/${projectId}/meta/test123`);
-      const data = response.data;
-      const author = data.author?.username;
+      const zip2 = new AdmZip(getProjectPath(projectId));
+      const entry zip2.getEntry('data.json');
+      const datab = zip2.readAsText(entry);
+      const data = JSON.parse(datab);
       addMessage(author, `${username} commented on your project <a href="/projects/#${projectId}/">${data.title}</a>: ${text}`);
     } catch (e) {
       console.error('Notification error:', e.message);
