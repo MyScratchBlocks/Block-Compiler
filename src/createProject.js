@@ -276,7 +276,7 @@ router.post('/remix/:id', (req, res) => {
     });
 
     newZip.writeZip(newFilePath);
-
+    addMessage(originDatajson.author.username, `${username} remixed your project <a href="/projects/#${originDataJson.id}">${originDataJson.title}</a> to <a href="/projects/#${newDataJson.id}">${newDataJson.title}</a>`);
     res.json({
       message: `Remixed project created with ID ${newFileNum}`,
       id: newFileNum,
