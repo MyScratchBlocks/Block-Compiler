@@ -11,7 +11,6 @@ const PROJECTS_DIR = path.join(__dirname, '..', 'local_storage/uploads');
 // In-memory violation tracking
 const violations = {};
 
-// Base64-encoded bad words
 const base64Words = [
   'c2hpdA==', 'ZnVjaw==', 'ZGFtbg==', 'Yml0Y2g=', 'YXNzaG9sZQ==',
   'Y3VudA==', 'bmlnZ2Vy', 'ZmFn', 'ZGljaw==', 'Y29jaw==',
@@ -87,6 +86,18 @@ function writeCommentsToSb3(projectPath, comments) {
   }
 }
 
+// Recursively find any comment or reply by ID
+function findCommentById(comments, commentId) {
+  for (const comment of comments) {
+    if (comment.id === commentId) return comment;
+    if (comment.replies && comment.replies.length) {
+      const found = findCommentById(comment.replies, commentId);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 // GET comments
 router.get('/:projectId/comments', async (req, res) => {
   const projectId = req.params.projectId;
@@ -103,7 +114,7 @@ router.get('/:projectId/comments', async (req, res) => {
   }
 });
 
-// POST comment
+// POST new comment
 router.post('/:projectId/comments', async (req, res) => {
   const { text, user } = req.body;
   const username = user?.username || 'Anonymous';
@@ -138,20 +149,25 @@ router.post('/:projectId/comments', async (req, res) => {
     replies: []
   };
 
-  // Notify author (non-blocking)
+  // Notify project author (non-blocking)
   (async () => {
     try {
-      const zip2 = new AdmZip(getProjectPath(projectId));
-      const entry = zip2.getEntry('data.json');
-      const datab = zip2.readAsText(entry);
-      const data = JSON.parse(datab);
-      addMessage(data.author?.username, `${username} commented on your project <a href="/projects/#${projectId}">${data.title}</a>: ${text}`);
+      const zip = new AdmZip(projectPath);
+      const entry = zip.getEntry('data.json');
+      const data = JSON.parse(zip.readAsText(entry));
+      if (data.author?.username && data.title) {
+        addMessage(
+          data.author.username,
+          `${username} commented on your project <a href="/projects/#${projectId}?commentId=${newComment.id}">${data.title}</a>: ${text}`
+        );
+      }
     } catch (e) {
       console.error('Notification error:', e.message);
     }
   })();
 
   comments.push(newComment);
+
   await new Promise(resolve =>
     setImmediate(() => {
       writeCommentsToSb3(projectPath, comments);
@@ -162,7 +178,7 @@ router.post('/:projectId/comments', async (req, res) => {
   res.status(201).json(newComment);
 });
 
-// POST reply
+// POST reply to comment or reply
 router.post('/:projectId/comments/:commentId/reply', async (req, res) => {
   const { text, user } = req.body;
   const username = user?.username || 'Anonymous';
@@ -188,19 +204,38 @@ router.post('/:projectId/comments/:commentId/reply', async (req, res) => {
     setImmediate(() => resolve(readCommentsFromSb3(projectPath)))
   );
 
-  const comment = comments.find(c => c.id === commentId);
-  if (!comment) {
-    return res.status(404).json({ error: 'Comment not found' });
+  const parent = findCommentById(comments, commentId);
+  if (!parent) {
+    return res.status(404).json({ error: 'Comment or reply not found' });
   }
 
   const reply = {
     id: uuidv4(),
     text,
     createdAt: new Date().toISOString(),
-    user: username
+    user: username,
+    replies: []
   };
 
-  comment.replies.push(reply);
+  parent.replies = parent.replies || [];
+  parent.replies.push(reply);
+
+  // Notify the author of the comment or reply
+  (async () => {
+    try {
+      const zip = new AdmZip(projectPath);
+      const entry = zip.getEntry('data.json');
+      const data = JSON.parse(zip.readAsText(entry));
+      if (parent.user && data.title) {
+        addMessage(
+          parent.user,
+          `${username} replied to your comment on <a href="/projects/#${projectId}?commentId=${parent.id}">${data.title}</a>: ${text}`
+        );
+      }
+    } catch (e) {
+      console.error('Reply notification error:', e.message);
+    }
+  })();
 
   await new Promise(resolve =>
     setImmediate(() => {
