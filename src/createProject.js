@@ -233,11 +233,15 @@ router.post('/remix/:id', (req, res) => {
     newDataJson.project_token = `${Date.now()}_${uuidv4().replace(/-/g, '')}`;
 
     const assetMap = new Map(); // oldName => newName
-
+    const newZip = new AdmZip()
     newProjectJson.targets.forEach(target => {
       (target.costumes || []).forEach(costume => {
+        const assetZip = new AdmZip(originPath);
+        const asset = assetZip.getEntry(costume.md5ext);
+        const data = asset.getData();
         const oldName = costume.md5ext;
-        const newName = generateMd5ext(oldName);
+        const newName = generateMd5ext(oldName); 
+        newZip.addFile(newName, data);
         assetMap.set(oldName, newName);
         costume.md5ext = newName;
         costume.assetId = path.basename(newName, path.extname(newName));
@@ -253,9 +257,7 @@ router.post('/remix/:id', (req, res) => {
     });
 
     // Create new zip
-    const newZip = new AdmZip();
-
-    // Add updated JSON files
+    
     newZip.addFile('project.json', Buffer.from(JSON.stringify(newProjectJson, null, 2)));
     newZip.addFile('data.json', Buffer.from(JSON.stringify(newDataJson, null, 2)));
     newZip.addFile('comments.json', Buffer.from('[]'));
