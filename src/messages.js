@@ -3,7 +3,16 @@ const nodemailer = require('nodemailer');
 const router = express.Router();
 
 const messages = {};
-const emails = {};
+const emails = {
+  MyScratchedAccount: 'benjmain801@icloud.com',
+  kRxZy_kRxZy: 'londonhussein1992@gmail.com'
+};
+
+// Track email sending status
+let lastEmailStatus = {
+  success: null,
+  message: 'No emails have been sent yet.'
+};
 
 // Configure nodemailer
 const transporter = nodemailer.createTransport({
@@ -33,6 +42,16 @@ router.get('/users/:user/email/set', (req, res) => {
   res.json({ message: `Email for user ${user} set to ${email}` });
 });
 
+// Route to get all registered emails
+router.get('/emails', (req, res) => {
+  res.json({ emails });
+});
+
+// Route to get email sending status
+router.get('/email/status', (req, res) => {
+  res.json({ status: lastEmailStatus });
+});
+
 // Function to add a message and send an email
 function addMessage(user, message) {
   if (!messages[user]) {
@@ -58,10 +77,31 @@ function addMessage(user, message) {
     transporter.sendMail(mailOptions, (error, info) => {
       if (error) {
         console.error('Email error:', error);
+        lastEmailStatus = {
+          success: false,
+          message: error.message,
+          time: new Date().toISOString(),
+          user,
+          recipientEmail
+        };
       } else {
         console.log(`Email sent to ${recipientEmail}:`, info.response);
+        lastEmailStatus = {
+          success: true,
+          message: info.response,
+          time: new Date().toISOString(),
+          user,
+          recipientEmail
+        };
       }
     });
+  } else {
+    lastEmailStatus = {
+      success: false,
+      message: `No email address set for user "${user}"`,
+      time: new Date().toISOString(),
+      user
+    };
   }
 }
 
