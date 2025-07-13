@@ -14,7 +14,7 @@ const violations = {};
 const base64Words = [
   'c2hpdA==', 'ZnVjaw==', 'ZGFtbg==', 'Yml0Y2g=', 'YXNzaG9sZQ==',
   'Y3VudA==', 'bmlnZ2Vy', 'ZmFn', 'ZGljaw==', 'Y29jaw==',
-  'cHVzc3k=', 'cmV0YXJk'
+  'cHVzc3k=', 'cmV0YXJk', 'YXV0b21vZG11dGU='
 ];
 const badWords = base64Words.map(w =>
   Buffer.from(w, 'base64').toString('utf8')
