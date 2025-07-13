@@ -10,7 +10,7 @@ const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: 'myscratchblocks.team@gmail.com',
-    pass: 'hiddenCode'
+    pass: 'mnnt aydh bybn tiha'
   }
 });
 
