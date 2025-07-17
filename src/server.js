@@ -33,6 +33,7 @@ app.get('/', (req, res) => {
 
 // Load modular API routes
 // Ensure your individual router files export an Express Router
+app.use(require('./backupDb'));
 app.use('/', require('./createProject')); // Example: /api/create-project
 app.use('/', require('./saveProject'));   // Example: /api/save-project
 app.use('/', require('./metadata'));     // Example: /api/projects/:id/meta
