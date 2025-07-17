@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const AdmZip = require('adm-zip');
 const { Readable } = require('stream');
 
 const router = express.Router();
@@ -50,6 +51,7 @@ function getContentLength(filePath, boundary) {
   return headerLength + fileSize + footerLength;
 }
 
+// Upload function
 async function uploadSB3Files() {
   try {
     if (!fs.existsSync(UPLOAD_DIR)) {
@@ -101,11 +103,26 @@ async function uploadSB3Files() {
 
     if (allSuccessful) {
       console.log('[upload] All uploads successful. Cleaning up and downloading new data...');
-      deleteFolderRecursive(UPLOAD_DIR);
-      await downloadNewUploads();
+      deleteAllFilesInFolder(UPLOAD_DIR);
+      await downloadAndExtractNewUploadsAdmZip();
     }
   } catch (err) {
     console.error('[upload] Unexpected error:', err.message);
+  }
+}
+
+// Delete all files (and subfolders) inside folder but keep folder itself
+function deleteAllFilesInFolder(folderPath) {
+  if (fs.existsSync(folderPath)) {
+    fs.readdirSync(folderPath).forEach(file => {
+      const curPath = path.join(folderPath, file);
+      if (fs.lstatSync(curPath).isDirectory()) {
+        deleteFolderRecursive(curPath);
+      } else {
+        fs.unlinkSync(curPath);
+      }
+    });
+    console.log('[fs] Deleted all files in uploads folder.');
   }
 }
 
@@ -121,36 +138,47 @@ function deleteFolderRecursive(folderPath) {
       }
     });
     fs.rmdirSync(folderPath);
-    console.log('[fs] Deleted uploads folder.');
+    console.log(`[fs] Deleted folder: ${folderPath}`);
   }
 }
 
-async function downloadNewUploads() {
+// Download the zip file and extract it into UPLOAD_DIR using adm-zip
+async function downloadAndExtractNewUploadsAdmZip() {
   try {
-    const outDir = UPLOAD_DIR;
-    fs.mkdirSync(outDir, { recursive: true });
-
-    const outPath = path.join(outDir, 'new_files.zip');
-    const writer = fs.createWriteStream(outPath);
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
     const response = await axios({
       method: 'GET',
       url: `${SERVER_URL}/uploads/files`,
-      responseType: 'stream',
+      responseType: 'arraybuffer', // get data as a buffer
     });
 
-    response.data.pipe(writer);
+    const zipBuffer = Buffer.from(response.data);
 
-    await new Promise((resolve, reject) => {
-      writer.on('finish', resolve);
-      writer.on('error', reject);
-    });
+    const zip = new AdmZip(zipBuffer);
+    zip.extractAllTo(UPLOAD_DIR, true); // overwrite = true
 
-    console.log('[download] Downloaded new_files.zip to uploads.');
+    console.log('[download] Downloaded and extracted new files to uploads folder.');
   } catch (err) {
-    console.error('[download] Error downloading files:', err.message);
+    console.error('[download] Error downloading or extracting files:', err.message);
   }
 }
+
+// Endpoint to return the uploads.zip file
+router.get('/download-uploads-zip', (req, res) => {
+  const zipPath = path.join(UPLOAD_DIR, 'uploads.zip');
+
+  if (!fs.existsSync(zipPath)) {
+    return res.status(404).send('uploads.zip not found');
+  }
+
+  res.download(zipPath, 'uploads.zip', err => {
+    if (err) {
+      console.error('Error sending uploads.zip:', err);
+      res.status(500).send('Error sending uploads.zip');
+    }
+  });
+});
 
 // Express route to show upload status
 router.get('/status', (req, res) => {
@@ -158,6 +186,6 @@ router.get('/status', (req, res) => {
 });
 
 // Schedule upload every 1 minute
-setInterval(uploadSB3Files, 60 * 1000);
+setInterval(uploadSB3Files, 10 * 1000);
 
 module.exports = router;
