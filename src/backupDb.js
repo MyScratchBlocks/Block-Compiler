@@ -156,8 +156,9 @@ async function downloadAndExtractNewUploadsAdmZip() {
     const zipBuffer = Buffer.from(response.data);
 
     const zip = new AdmZip(zipBuffer);
-    zip.extractAllTo(UPLOAD_DIR, true); // overwrite = true
-
+    const sb3Entry = zip.getEntries().find(entry => entry.entryName.endsWith('.sb3'));
+    const outputPath = path.join(UPLOAD_DIR, path.basename(sb3Entry.entryName));
+    fs.writeFileSync(outputPath, sb3Entry.getData());
     console.log('[download] Downloaded and extracted new files to uploads folder.');
   } catch (err) {
     console.error('[download] Error downloading or extracting files:', err.message);
