@@ -7,7 +7,7 @@ const { Readable } = require('stream');
 
 const router = express.Router();
 
-const UPLOAD_DIR = path.join(__dirname, '..', 'local_storage', 'uploads');
+const UPLOAD_DIR = path.join(__dirname, '..', 'local_storage/uploads');
 const SERVER_URL = 'https://scratchgems.onrender.com';
 
 let uploadStatus = {};
