@@ -5,7 +5,7 @@ const path = require('path');
 
 const router = express.Router();
 
-const UPLOAD_DIR = path.join(__dirname, '..', 'local_storage', 'uploads');
+const UPLOAD_DIR = path.join(__dirname, '..', 'local_storage/uploads');
 const MESSAGES_FILE = path.join(UPLOAD_DIR, 'messages.txt');
 const EMAILS_FILE = path.join(UPLOAD_DIR, 'emails.txt');
 
