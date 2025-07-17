@@ -15,17 +15,12 @@ let uploadStatus = {};
 // Create multipart/form-data stream manually
 function createMultipartStream(filePath, fieldName, boundary) {
   const fileName = path.basename(filePath);
-
-  // multipart header for the file field
   const headers = Buffer.from(
     `--${boundary}\r\n` +
     `Content-Disposition: form-data; name="${fieldName}"; filename="${fileName}"\r\n` +
     `Content-Type: application/octet-stream\r\n\r\n`
   );
-
-  // multipart footer (closing boundary)
   const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
-
   const fileStream = fs.createReadStream(filePath);
 
   return Readable.from((async function* () {
@@ -39,19 +34,16 @@ function createMultipartStream(filePath, fieldName, boundary) {
 function getContentLength(filePath, boundary) {
   const fileSize = fs.statSync(filePath).size;
   const fileName = path.basename(filePath);
-
   const headerLength = Buffer.byteLength(
     `--${boundary}\r\n` +
     `Content-Disposition: form-data; name="file"; filename="${fileName}"\r\n` +
     `Content-Type: application/octet-stream\r\n\r\n`
   );
-
   const footerLength = Buffer.byteLength(`\r\n--${boundary}--\r\n`);
-
   return headerLength + fileSize + footerLength;
 }
 
-// Upload function
+// Upload .sb3 files
 async function uploadSB3Files() {
   try {
     if (!fs.existsSync(UPLOAD_DIR)) {
@@ -60,7 +52,6 @@ async function uploadSB3Files() {
     }
 
     const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.endsWith('.sb3'));
-
     if (files.length === 0) {
       console.log('[upload] No .sb3 files found.');
       return;
@@ -68,9 +59,11 @@ async function uploadSB3Files() {
 
     console.log(`[upload] Found ${files.length} file(s).`);
 
+    uploadStatus = {}; // Reset status
+
     for (const file of files) {
       const filePath = path.join(UPLOAD_DIR, file);
-      const boundary = '----ScratchGemsBoundary'; // boundary string, consistent per request
+      const boundary = '----ScratchGemsBoundary';
       const contentLength = getContentLength(filePath, boundary);
       const stream = createMultipartStream(filePath, 'file', boundary);
 
@@ -83,18 +76,10 @@ async function uploadSB3Files() {
           maxBodyLength: Infinity,
         });
 
-        uploadStatus[file] = {
-          status: 'success',
-          response: response.data,
-        };
-
+        uploadStatus[file] = { status: 'success', response: response.data };
         console.log(`[upload] ${file}: SUCCESS`);
       } catch (err) {
-        uploadStatus[file] = {
-          status: 'failed',
-          error: err.message,
-        };
-
+        uploadStatus[file] = { status: 'failed', error: err.message };
         console.error(`[upload] ${file}: FAILED - ${err.message}`);
       }
     }
@@ -111,7 +96,7 @@ async function uploadSB3Files() {
   }
 }
 
-// Delete all files (and subfolders) inside folder but keep folder itself
+// Delete all files (and subfolders) in folder
 function deleteAllFilesInFolder(folderPath) {
   if (fs.existsSync(folderPath)) {
     fs.readdirSync(folderPath).forEach(file => {
@@ -142,6 +127,7 @@ function deleteFolderRecursive(folderPath) {
   }
 }
 
+// Download and extract all .sb3 files from uploads.zip
 async function downloadAndExtractNewUploadsAdmZip() {
   try {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -149,40 +135,45 @@ async function downloadAndExtractNewUploadsAdmZip() {
     const response = await axios({
       method: 'GET',
       url: `${SERVER_URL}/uploads/files`,
-      responseType: 'arraybuffer', // get data as a buffer
+      responseType: 'arraybuffer',
     });
 
     const zipBuffer = Buffer.from(response.data);
-    const zip = new AdmZip(zipBuffer);
 
-    // Extract all .sb3 files
+    // Save the zip file temporarily
+    const zipPath = path.join(UPLOAD_DIR, 'uploads.zip');
+    fs.writeFileSync(zipPath, zipBuffer);
+    console.log('[download] Saved uploads.zip');
+
+    // Extract .sb3 files
+    const zip = new AdmZip(zipBuffer);
     const sb3Entries = zip.getEntries().filter(entry => entry.entryName.endsWith('.sb3'));
 
     if (sb3Entries.length === 0) {
-      console.log('[download] No .sb3 files found in the ZIP.');
+      console.warn('[extract] No .sb3 files found in the zip.');
       return;
     }
 
     for (const entry of sb3Entries) {
       const outputPath = path.join(UPLOAD_DIR, path.basename(entry.entryName));
       fs.writeFileSync(outputPath, entry.getData());
-      console.log(`[download] Extracted ${entry.entryName} to ${outputPath}`);
+      console.log(`[extract] Extracted ${entry.entryName}`);
     }
 
-    console.log('[download] Downloaded and extracted all .sb3 files to uploads folder.');
+    // Delete uploads.zip
+    fs.unlinkSync(zipPath);
+    console.log('[cleanup] Deleted uploads.zip');
   } catch (err) {
     console.error('[download] Error downloading or extracting files:', err.message);
   }
 }
 
-// Endpoint to return the uploads.zip file
+// Route to download uploads.zip (optional utility)
 router.get('/download-uploads-zip', (req, res) => {
   const zipPath = path.join(UPLOAD_DIR, 'uploads.zip');
-
   if (!fs.existsSync(zipPath)) {
     return res.status(404).send('uploads.zip not found');
   }
-
   res.download(zipPath, 'uploads.zip', err => {
     if (err) {
       console.error('Error sending uploads.zip:', err);
@@ -191,12 +182,12 @@ router.get('/download-uploads-zip', (req, res) => {
   });
 });
 
-// Express route to show upload status
+// Route to show upload status
 router.get('/status', (req, res) => {
   res.json(uploadStatus);
 });
 
-// Schedule upload every 1 minute
+// Run the upload job every 10 seconds (for testing)
 setInterval(uploadSB3Files, 10 * 1000);
 
 module.exports = router;
