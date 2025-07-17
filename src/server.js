@@ -7,7 +7,7 @@ const app = express();
 
 // --- Configuration ---
 const PORT = process.env.PORT || 5000;
-const ALLOWED_ORIGIN = 'https://myscratchblocks.github.io'; // Or read from process.env for production
+const ALLOWED_ORIGIN = 'https://myscratchblocks.ddns.net'; // Or read from process.env for production
 
 // --- Middleware ---
 
