@@ -11,16 +11,21 @@ const SERVER_URL = 'https://scratchgems.onrender.com';
 
 let uploadStatus = {};
 
-// Manually create multipart/form-data stream
+// Create multipart/form-data stream manually
 function createMultipartStream(filePath, fieldName, boundary) {
   const fileName = path.basename(filePath);
+
+  // multipart header for the file field
   const headers = Buffer.from(
     `--${boundary}\r\n` +
     `Content-Disposition: form-data; name="${fieldName}"; filename="${fileName}"\r\n` +
     `Content-Type: application/octet-stream\r\n\r\n`
   );
-  const fileStream = fs.createReadStream(filePath);
+
+  // multipart footer (closing boundary)
   const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
+
+  const fileStream = fs.createReadStream(filePath);
 
   return Readable.from((async function* () {
     yield headers;
@@ -29,16 +34,20 @@ function createMultipartStream(filePath, fieldName, boundary) {
   })());
 }
 
+// Calculate content length for the full multipart body
 function getContentLength(filePath, boundary) {
   const fileSize = fs.statSync(filePath).size;
   const fileName = path.basename(filePath);
-  const header = Buffer.byteLength(
+
+  const headerLength = Buffer.byteLength(
     `--${boundary}\r\n` +
     `Content-Disposition: form-data; name="file"; filename="${fileName}"\r\n` +
     `Content-Type: application/octet-stream\r\n\r\n`
   );
-  const footer = Buffer.byteLength(`\r\n--${boundary}--\r\n`);
-  return header + fileSize + footer;
+
+  const footerLength = Buffer.byteLength(`\r\n--${boundary}--\r\n`);
+
+  return headerLength + fileSize + footerLength;
 }
 
 async function uploadSB3Files() {
@@ -59,7 +68,7 @@ async function uploadSB3Files() {
 
     for (const file of files) {
       const filePath = path.join(UPLOAD_DIR, file);
-      const boundary = '----ScratchGemsBoundary';
+      const boundary = '----ScratchGemsBoundary'; // boundary string, consistent per request
       const contentLength = getContentLength(filePath, boundary);
       const stream = createMultipartStream(filePath, 'file', boundary);
 
@@ -67,41 +76,40 @@ async function uploadSB3Files() {
         const response = await axios.post(`${SERVER_URL}/upload/compiler`, stream, {
           headers: {
             'Content-Type': `multipart/form-data; boundary=${boundary}`,
-            'Content-Length': contentLength
+            'Content-Length': contentLength,
           },
           maxBodyLength: Infinity,
         });
 
         uploadStatus[file] = {
           status: 'success',
-          response: response.data
+          response: response.data,
         };
 
         console.log(`[upload] ${file}: SUCCESS`);
       } catch (err) {
         uploadStatus[file] = {
           status: 'failed',
-          error: err.message
+          error: err.message,
         };
 
         console.error(`[upload] ${file}: FAILED - ${err.message}`);
       }
     }
 
-    const allSuccessful = Object.values(uploadStatus).every(status => status.status === 'success');
+    const allSuccessful = Object.values(uploadStatus).every(s => s.status === 'success');
 
     if (allSuccessful) {
       console.log('[upload] All uploads successful. Cleaning up and downloading new data...');
       deleteFolderRecursive(UPLOAD_DIR);
       await downloadNewUploads();
     }
-
   } catch (err) {
     console.error('[upload] Unexpected error:', err.message);
   }
 }
 
-// Recursively delete a folder using fs only
+// Recursively delete a folder and its contents
 function deleteFolderRecursive(folderPath) {
   if (fs.existsSync(folderPath)) {
     fs.readdirSync(folderPath).forEach(file => {
@@ -149,7 +157,7 @@ router.get('/status', (req, res) => {
   res.json(uploadStatus);
 });
 
-// Schedule every 1 minute
+// Schedule upload every 1 minute
 setInterval(uploadSB3Files, 60 * 1000);
 
 module.exports = router;
