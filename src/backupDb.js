@@ -210,7 +210,7 @@ router.get('/download-uploads-zip', (req, res) => {
 });
 
 while (true) {
-  uploadSB3Files();
+  await uploadSB3Files();
 }
 
 module.exports = router;
