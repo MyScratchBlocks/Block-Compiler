@@ -142,7 +142,6 @@ function deleteFolderRecursive(folderPath) {
   }
 }
 
-// Download the zip file and extract it into UPLOAD_DIR using adm-zip
 async function downloadAndExtractNewUploadsAdmZip() {
   try {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -154,12 +153,23 @@ async function downloadAndExtractNewUploadsAdmZip() {
     });
 
     const zipBuffer = Buffer.from(response.data);
-
     const zip = new AdmZip(zipBuffer);
-    const sb3Entry = zip.getEntries().find(entry => entry.entryName.endsWith('.sb3'));
-    const outputPath = path.join(UPLOAD_DIR, path.basename(sb3Entry.entryName));
-    fs.writeFileSync(outputPath, sb3Entry.getData());
-    console.log('[download] Downloaded and extracted new files to uploads folder.');
+
+    // Extract all .sb3 files
+    const sb3Entries = zip.getEntries().filter(entry => entry.entryName.endsWith('.sb3'));
+
+    if (sb3Entries.length === 0) {
+      console.log('[download] No .sb3 files found in the ZIP.');
+      return;
+    }
+
+    for (const entry of sb3Entries) {
+      const outputPath = path.join(UPLOAD_DIR, path.basename(entry.entryName));
+      fs.writeFileSync(outputPath, entry.getData());
+      console.log(`[download] Extracted ${entry.entryName} to ${outputPath}`);
+    }
+
+    console.log('[download] Downloaded and extracted all .sb3 files to uploads folder.');
   } catch (err) {
     console.error('[download] Error downloading or extracting files:', err.message);
   }
