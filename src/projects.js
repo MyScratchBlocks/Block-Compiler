@@ -48,7 +48,8 @@ router.get('/api/projects', async (req, res) => {
         if (data.visibility !== 'unshared') {
           const favourites = Number(data.stats?.favourites || 0);
           const loves = Number(data.stats?.loves || 0);
-          const popularity = favourites + loves;
+          const views = Number(data.stats?.views || 0);
+          const popularity = favorites + loves + views;
 
           return {
             id: data.id || projectId,
