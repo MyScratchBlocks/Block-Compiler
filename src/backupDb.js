@@ -162,8 +162,9 @@ async function downloadAndExtractNewUploadsAdmZip() {
     log('download', 'Saved uploads.zip');
 
     const zip = new AdmZip(zipBuffer);
-    const sb3Entries = zip.getEntries().filter(entry => entry.entryName.endsWith('.sb3'));
-
+    const sb3Entries = zip.getEntries().filter(entry =>
+      entry.entryName.endsWith('.sb3') || entry.entryName.endsWith('.txt')
+    );
     if (sb3Entries.length === 0) {
       log('extract', 'No .sb3 files found in uploads.zip', 'error');
       downloadStatus.error = 'No .sb3 files found in uploads.zip';
