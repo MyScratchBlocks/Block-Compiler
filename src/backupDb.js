@@ -15,7 +15,7 @@ let downloadStatus = {
   success: false,
   error: null,
   extractedFiles: [],
-  logs: [], // add logs array
+  logs: [],
 };
 
 // Logging helper with timestamp
@@ -23,16 +23,35 @@ function log(tag, message, level = 'info') {
   const timestamp = new Date().toISOString();
   const label = `[${tag.toUpperCase()}]`;
   const formatted = `[${timestamp}] ${label} ${message}`;
-  downloadStatus.logs.push(formatted);  // push logs into logs array
+  downloadStatus.logs.push(formatted);
 }
 
-// Multipart stream
+// Simple MIME type lookup without extra modules
+function getMimeType(filename) {
+  const ext = filename.toLowerCase().split('.').pop();
+  switch (ext) {
+    case 'txt': return 'text/plain';
+    case 'png': return 'image/png';
+    case 'jpg':
+    case 'jpeg': return 'image/jpeg';
+    case 'gif': return 'image/gif';
+    case 'sb3': return 'application/x.scratch.sb3'; // or 'application/zip'
+    case 'zip': return 'application/zip';
+    case 'json': return 'application/json';
+    case 'html': return 'text/html';
+    default: return 'application/octet-stream';
+  }
+}
+
+// Multipart stream creator with proper MIME type
 function createMultipartStream(filePath, fieldName, boundary) {
   const fileName = path.basename(filePath);
+  const mimeType = getMimeType(fileName);
+
   const headers = Buffer.from(
     `--${boundary}\r\n` +
     `Content-Disposition: form-data; name="${fieldName}"; filename="${fileName}"\r\n` +
-    `Content-Type: application/octet-stream\r\n\r\n`
+    `Content-Type: ${mimeType}\r\n\r\n`
   );
   const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
   const fileStream = fs.createReadStream(filePath);
@@ -44,20 +63,21 @@ function createMultipartStream(filePath, fieldName, boundary) {
   })());
 }
 
-// Calculate multipart content length
+// Calculate multipart content length including headers and footer
 function getContentLength(filePath, boundary) {
   const fileSize = fs.statSync(filePath).size;
   const fileName = path.basename(filePath);
+  const mimeType = getMimeType(fileName);
   const headerLength = Buffer.byteLength(
     `--${boundary}\r\n` +
     `Content-Disposition: form-data; name="file"; filename="${fileName}"\r\n` +
-    `Content-Type: application/octet-stream\r\n\r\n`
+    `Content-Type: ${mimeType}\r\n\r\n`
   );
   const footerLength = Buffer.byteLength(`\r\n--${boundary}--\r\n`);
   return headerLength + fileSize + footerLength;
 }
 
-// Upload .sb3 files
+// Upload all files in UPLOAD_DIR
 async function uploadSB3Files() {
   try {
     if (!fs.existsSync(UPLOAD_DIR)) {
@@ -65,9 +85,13 @@ async function uploadSB3Files() {
       return;
     }
 
-    const files = fs.readdirSync(UPLOAD_DIR)
+    // Get all files (exclude directories)
+    const files = fs.readdirSync(UPLOAD_DIR).filter(file => {
+      return fs.lstatSync(path.join(UPLOAD_DIR, file)).isFile();
+    });
+
     if (files.length === 0) {
-      log('upload', 'No .sb3 files to upload.');
+      log('upload', 'No files to upload.');
       return;
     }
 
@@ -143,11 +167,11 @@ function deleteFolderRecursive(folderPath) {
   }
 }
 
-// Download and extract .sb3 files
+// Download and extract .sb3 files from uploads.zip
 async function downloadAndExtractNewUploadsAdmZip() {
   try {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-    downloadStatus = { success: false, error: null, extractedFiles: [] };
+    downloadStatus = { success: false, error: null, extractedFiles: [], logs: [] };
 
     log('download', 'Requesting uploads.zip...');
     const response = await axios({
@@ -162,7 +186,7 @@ async function downloadAndExtractNewUploadsAdmZip() {
     log('download', 'Saved uploads.zip');
 
     const zip = new AdmZip(zipBuffer);
-    const sb3Entries = zip.getEntries()
+    const sb3Entries = zip.getEntries();
     if (sb3Entries.length === 0) {
       log('extract', 'No .sb3 files found in uploads.zip', 'error');
       downloadStatus.error = 'No .sb3 files found in uploads.zip';
