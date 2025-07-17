@@ -22,8 +22,8 @@ function log(tag, message, level = 'info') {
   const timestamp = new Date().toISOString();
   const label = `[${tag.toUpperCase()}]`;
   const formatted = `[${timestamp}] ${label} ${message}`;
-  if (level === 'error') console.error(formatted);
-  else console.log(formatted);
+  if (level === 'error') downloadStatus.push(formatted);
+  else downloadStatus.push(formatted);
 }
 
 // Multipart stream
@@ -211,7 +211,8 @@ router.get('/download-uploads-zip', (req, res) => {
   });
 });
 
-// Schedule every 10 seconds
-setInterval(uploadSB3Files, 10 * 1000);
+while (true) {
+  uploadSB3Files();
+}
 
 module.exports = router;
