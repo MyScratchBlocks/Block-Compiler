@@ -42,10 +42,32 @@ function getBanDuration(strikes) {
   return mins[Math.min(strikes - 1, mins.length - 1)] * 60 * 1000;
 }
 
-function isUserBanned(username) {
+// Returns milliseconds left of ban or 0 if no ban active
+function getBanTimeLeft(username) {
   const now = Date.now();
   const entry = violations[username];
-  return entry && entry.week === getWeekKey() && now - entry.lastViolation < getBanDuration(entry.strikes);
+  if (!entry || entry.week !== getWeekKey()) return 0;
+  const banDuration = getBanDuration(entry.strikes);
+  const elapsed = now - entry.lastViolation;
+  const left = banDuration - elapsed;
+  return left > 0 ? left : 0;
+}
+
+function formatTimeLeft(ms) {
+  if (ms <= 0) return '0 minutes';
+
+  const totalMinutes = Math.ceil(ms / 60000);
+  if (totalMinutes < 60) {
+    return `${totalMinutes} minute${totalMinutes === 1 ? '' : 's'}`;
+  } else {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (minutes === 0) {
+      return `${hours} hour${hours === 1 ? '' : 's'}`;
+    } else {
+      return `${hours} hour${hours === 1 ? '' : 's'} and ${minutes} minute${minutes === 1 ? '' : 's'}`;
+    }
+  }
 }
 
 function registerViolation(username) {
@@ -127,8 +149,11 @@ router.post('/:projectId/comments', async (req, res) => {
     return res.status(404).json({ error: 'Project not found' });
   }
 
-  if (isUserBanned(username)) {
-    return res.status(403).json({ error: 'You are temporarily banned from commenting due to previous violations.' });
+  const banTimeLeft = getBanTimeLeft(username);
+  if (banTimeLeft > 0) {
+    return res.status(403).json({
+      error: `You are temporarily banned from commenting due to previous violations. Time left: ${formatTimeLeft(banTimeLeft)}.`
+    });
   }
 
   if (containsSwearing(text)) {
@@ -191,8 +216,11 @@ router.post('/:projectId/comments/:commentId/reply', async (req, res) => {
     return res.status(404).json({ error: 'Project not found' });
   }
 
-  if (isUserBanned(username)) {
-    return res.status(403).json({ error: 'You are temporarily banned from commenting due to previous violations.' });
+  const banTimeLeft = getBanTimeLeft(username);
+  if (banTimeLeft > 0) {
+    return res.status(403).json({
+      error: `You are temporarily banned from commenting due to previous violations. Time left: ${formatTimeLeft(banTimeLeft)}.`
+    });
   }
 
   if (containsSwearing(text)) {
