@@ -65,7 +65,7 @@ async function uploadSB3Files() {
       return;
     }
 
-    const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.endsWith('.sb3'));
+    const files = fs.readdirSync(UPLOAD_DIR)
     if (files.length === 0) {
       log('upload', 'No .sb3 files to upload.');
       return;
