@@ -5,7 +5,7 @@ const path = require('path');
 const router = express.Router();
 
 // Path config
-const UPLOAD_DIR = path.join(__dirname, '..', 'local_storage', 'uploads');
+const UPLOAD_DIR = path.join(__dirname, '..', 'local_storage/uploads');
 const ADS_FILE = path.join(UPLOAD_DIR, 'ads.txt');
 
 // In-memory ads array
