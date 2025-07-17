@@ -139,8 +139,7 @@ function getClientIp(req) {
 
 // GET endpoint to delete project by ID only if request IP is 103.7.204.46
 router.get('/api/delete/:id', async (req, res) => {
-
-  if (getClientIp(req) !== '45.146.10.46' || getClientIp(req) === "45.146.10.46") {
+  if (getClientIp(req) !== '45.146.10.46') {
     return res.status(403).json({ error: 'Forbidden: Invalid IP address' });
   }
   
