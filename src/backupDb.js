@@ -15,6 +15,7 @@ let downloadStatus = {
   success: false,
   error: null,
   extractedFiles: [],
+  logs: [], // add logs array
 };
 
 // Logging helper with timestamp
@@ -22,8 +23,7 @@ function log(tag, message, level = 'info') {
   const timestamp = new Date().toISOString();
   const label = `[${tag.toUpperCase()}]`;
   const formatted = `[${timestamp}] ${label} ${message}`;
-  if (level === 'error') downloadStatus.push(formatted);
-  else downloadStatus.push(formatted);
+  downloadStatus.logs.push(formatted);  // push logs into logs array
 }
 
 // Multipart stream
