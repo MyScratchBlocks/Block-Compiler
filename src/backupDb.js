@@ -11,8 +11,22 @@ const UPLOAD_DIR = path.join(__dirname, '..', 'local_storage', 'uploads');
 const SERVER_URL = 'https://scratchgems.onrender.com';
 
 let uploadStatus = {};
+let downloadStatus = {
+  success: false,
+  error: null,
+  extractedFiles: [],
+};
 
-// Create multipart/form-data stream manually
+// Logging helper with timestamp
+function log(tag, message, level = 'info') {
+  const timestamp = new Date().toISOString();
+  const label = `[${tag.toUpperCase()}]`;
+  const formatted = `[${timestamp}] ${label} ${message}`;
+  if (level === 'error') console.error(formatted);
+  else console.log(formatted);
+}
+
+// Multipart stream
 function createMultipartStream(filePath, fieldName, boundary) {
   const fileName = path.basename(filePath);
   const headers = Buffer.from(
@@ -30,7 +44,7 @@ function createMultipartStream(filePath, fieldName, boundary) {
   })());
 }
 
-// Calculate content length for the full multipart body
+// Calculate multipart content length
 function getContentLength(filePath, boundary) {
   const fileSize = fs.statSync(filePath).size;
   const fileName = path.basename(filePath);
@@ -47,19 +61,18 @@ function getContentLength(filePath, boundary) {
 async function uploadSB3Files() {
   try {
     if (!fs.existsSync(UPLOAD_DIR)) {
-      console.log('[upload] No uploads directory found.');
+      log('upload', 'UPLOAD_DIR does not exist.');
       return;
     }
 
     const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.endsWith('.sb3'));
     if (files.length === 0) {
-      console.log('[upload] No .sb3 files found.');
+      log('upload', 'No .sb3 files to upload.');
       return;
     }
 
-    console.log(`[upload] Found ${files.length} file(s).`);
-
-    uploadStatus = {}; // Reset status
+    log('upload', `Uploading ${files.length} file(s)...`);
+    uploadStatus = {};
 
     for (const file of files) {
       const filePath = path.join(UPLOAD_DIR, file);
@@ -77,26 +90,28 @@ async function uploadSB3Files() {
         });
 
         uploadStatus[file] = { status: 'success', response: response.data };
-        console.log(`[upload] ${file}: SUCCESS`);
+        log('upload', `${file} uploaded successfully.`);
       } catch (err) {
         uploadStatus[file] = { status: 'failed', error: err.message };
-        console.error(`[upload] ${file}: FAILED - ${err.message}`);
+        log('upload', `${file} failed to upload: ${err.message}`, 'error');
       }
     }
 
     const allSuccessful = Object.values(uploadStatus).every(s => s.status === 'success');
 
     if (allSuccessful) {
-      console.log('[upload] All uploads successful. Cleaning up and downloading new data...');
+      log('upload', 'All files uploaded successfully. Cleaning up and downloading new files...');
       deleteAllFilesInFolder(UPLOAD_DIR);
       await downloadAndExtractNewUploadsAdmZip();
+    } else {
+      log('upload', 'One or more files failed to upload.', 'error');
     }
   } catch (err) {
-    console.error('[upload] Unexpected error:', err.message);
+    log('upload', `Unexpected error: ${err.message}`, 'error');
   }
 }
 
-// Delete all files (and subfolders) in folder
+// Delete all files in a folder (not the folder itself)
 function deleteAllFilesInFolder(folderPath) {
   if (fs.existsSync(folderPath)) {
     fs.readdirSync(folderPath).forEach(file => {
@@ -105,13 +120,14 @@ function deleteAllFilesInFolder(folderPath) {
         deleteFolderRecursive(curPath);
       } else {
         fs.unlinkSync(curPath);
+        log('fs', `Deleted file: ${curPath}`);
       }
     });
-    console.log('[fs] Deleted all files in uploads folder.');
+    log('fs', 'All files deleted from UPLOAD_DIR.');
   }
 }
 
-// Recursively delete a folder and its contents
+// Recursively delete a folder
 function deleteFolderRecursive(folderPath) {
   if (fs.existsSync(folderPath)) {
     fs.readdirSync(folderPath).forEach(file => {
@@ -123,15 +139,17 @@ function deleteFolderRecursive(folderPath) {
       }
     });
     fs.rmdirSync(folderPath);
-    console.log(`[fs] Deleted folder: ${folderPath}`);
+    log('fs', `Deleted folder: ${folderPath}`);
   }
 }
 
-// Download and extract all .sb3 files from uploads.zip
+// Download and extract .sb3 files
 async function downloadAndExtractNewUploadsAdmZip() {
   try {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    downloadStatus = { success: false, error: null, extractedFiles: [] };
 
+    log('download', 'Requesting uploads.zip...');
     const response = await axios({
       method: 'GET',
       url: `${SERVER_URL}/uploads/files`,
@@ -139,36 +157,46 @@ async function downloadAndExtractNewUploadsAdmZip() {
     });
 
     const zipBuffer = Buffer.from(response.data);
-
-    // Save the zip file temporarily
     const zipPath = path.join(UPLOAD_DIR, 'uploads.zip');
     fs.writeFileSync(zipPath, zipBuffer);
-    console.log('[download] Saved uploads.zip');
+    log('download', 'Saved uploads.zip');
 
-    // Extract .sb3 files
     const zip = new AdmZip(zipBuffer);
     const sb3Entries = zip.getEntries().filter(entry => entry.entryName.endsWith('.sb3'));
 
     if (sb3Entries.length === 0) {
-      console.warn('[extract] No .sb3 files found in the zip.');
+      log('extract', 'No .sb3 files found in uploads.zip', 'error');
+      downloadStatus.error = 'No .sb3 files found in uploads.zip';
       return;
     }
 
     for (const entry of sb3Entries) {
       const outputPath = path.join(UPLOAD_DIR, path.basename(entry.entryName));
       fs.writeFileSync(outputPath, entry.getData());
-      console.log(`[extract] Extracted ${entry.entryName}`);
+      downloadStatus.extractedFiles.push(entry.entryName);
+      log('extract', `Extracted ${entry.entryName}`);
     }
 
-    // Delete uploads.zip
     fs.unlinkSync(zipPath);
-    console.log('[cleanup] Deleted uploads.zip');
+    log('cleanup', 'Deleted uploads.zip after extraction.');
+
+    downloadStatus.success = true;
   } catch (err) {
-    console.error('[download] Error downloading or extracting files:', err.message);
+    downloadStatus.success = false;
+    downloadStatus.error = err.message;
+    log('download', `Error downloading or extracting uploads.zip: ${err.message}`, 'error');
   }
 }
 
-// Route to download uploads.zip (optional utility)
+// Status route with both upload and download results
+router.get('/status', (req, res) => {
+  res.json({
+    uploadStatus,
+    downloadStatus,
+  });
+});
+
+// Optional route to serve uploads.zip if needed
 router.get('/download-uploads-zip', (req, res) => {
   const zipPath = path.join(UPLOAD_DIR, 'uploads.zip');
   if (!fs.existsSync(zipPath)) {
@@ -176,18 +204,13 @@ router.get('/download-uploads-zip', (req, res) => {
   }
   res.download(zipPath, 'uploads.zip', err => {
     if (err) {
-      console.error('Error sending uploads.zip:', err);
+      log('express', `Error sending uploads.zip: ${err.message}`, 'error');
       res.status(500).send('Error sending uploads.zip');
     }
   });
 });
 
-// Route to show upload status
-router.get('/status', (req, res) => {
-  res.json(uploadStatus);
-});
-
-// Run the upload job every 10 seconds (for testing)
+// Schedule every 10 seconds
 setInterval(uploadSB3Files, 10 * 1000);
 
 module.exports = router;
