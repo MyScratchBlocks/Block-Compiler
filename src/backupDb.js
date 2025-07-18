@@ -233,12 +233,8 @@ router.get('/download-uploads-zip', (req, res) => {
 });
 
 // Auto loop with delay
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-(async () => {
-  while (true) {
-    await uploadSB3Files();
-  }
-})();
+while (true) {
+  await uploadSB3Files();
+}
 
 module.exports = router;
