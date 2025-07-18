@@ -81,7 +81,7 @@ router.post('/:id/save', upload.single('project'), async (req, res) => {
     fs.writeFileSync(path.join(tempDir, `${id}.sb3`), newZip.toBuffer());
 
     // Generate embed HTML
-    const turboWarpEmbedUrl = `https://turbowarp.org/embed?project_url=https://editor-compiler.onrender.com/projectSb3/${id}`;
+    const turboWarpEmbedUrl = `https://myscratchblocks.ddns.net/scratch-gui/embed?project_url=https://editor-compiler.onrender.com/projectSb3/${id}`;
     const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
