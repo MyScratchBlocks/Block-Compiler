@@ -43,12 +43,14 @@ let lastEmailStatus = {
   message: 'No emails have been sent yet.'
 };
 
-// Nodemailer transporter
+// Nodemailer transporter for Zoho Mail with custom domain
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.zoho.com',
+  port: 465,
+  secure: true, // use SSL
   auth: {
-    user: 'myscratchblocks.team@gmail.com',
-    pass: 'mnnt aydh bybn tiha'
+    user: 'noreply@myscratchblocks.dedyn.io',  // your Zoho custom domain email
+    pass: '7F1uTrxdJzM7'                       // your Zoho app password
   }
 });
 
@@ -114,7 +116,7 @@ function addMessage(user, message) {
   const recipientEmail = emails[user];
   if (recipientEmail) {
     const mailOptions = {
-      from: '"MyScratchBlocks Team" <myscratchblocks.team@gmail.com>',
+      from: '"MyScratchBlocks Team" <noreply@myscratchblocks.dedyn.io>', // your Zoho custom domain email
       to: recipientEmail,
       subject: `New Message for ${user}`,
       html: `
