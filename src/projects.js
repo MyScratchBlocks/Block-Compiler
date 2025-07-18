@@ -45,7 +45,7 @@ router.get('/api/projects', async (req, res) => {
           return null;
         }
 
-        if (data.visibility !== 'unshared') {
+        if (data.visibility == 'visible') {
           const favourites = Number(data.stats?.favourites || 0);
           const loves = Number(data.stats?.loves || 0);
           const views = Number(data.stats?.views || 0);
@@ -54,9 +54,9 @@ router.get('/api/projects', async (req, res) => {
           return {
             id: data.id || projectId,
             name: data.title || 'Untitled',
-            image: data.image || THUMBNAIL_URL,
+            image: data.image || '',
             author: data.author?.username || 'Unknown User',
-            link: `https://myscratchblocks.github.io/projects#${data.id || projectId}`,
+            link: `https://myscratchblocks.github.io/projects/#${data.id || projectId}`,
             popularity
           };
         }
