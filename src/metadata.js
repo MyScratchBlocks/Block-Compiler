@@ -149,6 +149,48 @@ router.put('/api/share/:id', (req, res) => {
   }
 });
 
+// PUT share project
+router.put('/api/unshare/:id', (req, res) => {
+  const { id } = req.params;
+
+  if (!/^\d+$/.test(id)) {
+    return res.status(400).json({ error: 'Invalid project ID format' });
+  }
+
+  const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
+
+  try {
+    fs.accessSync(filePath, fs.constants.F_OK);
+    const zip = new AdmZip(filePath);
+    const entry = zip.getEntry('data.json');
+
+    if (!entry) {
+      return res.status(404).json({ error: 'data.json not found in project file' });
+    }
+
+    let data;
+    try {
+      data = JSON.parse(entry.getData().toString('utf-8'));
+    } catch (parseErr) {
+      return res.status(500).json({ error: 'Failed to parse existing project metadata' });
+    }
+
+    data.visibility = 'unshared';
+
+    zip.deleteFile('data.json');
+    zip.addFile('data.json', Buffer.from(JSON.stringify(data, null, 2)));
+    zip.writeZip(filePath);
+
+    res.json({ success: true, message: `Project ${id} visibility set to 'visible'` });
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      return res.status(404).json({ error: 'Project file not found' });
+    }
+    console.error('Share project error:', err.stack || err.message);
+    return res.status(500).json({ error: 'Failed to share project' });
+  }
+});
+
 // ────────────────────────────────────────────────
 // POST image upload
 router.post('/api/upload/:id', (req, res) => {
