@@ -50,7 +50,7 @@ const transporter = nodemailer.createTransport({
   secure: false, // use SSL
   auth: {
     user: 'noreply@myscratchblocks.dedyn.io',  // your Zoho custom domain email
-    pass: '7F1uTrxdJzM7'                       // your Zoho app password
+    pass: '7au LwJ4 R3Akm'                       // your Zoho app password
   }
 });
 
