@@ -51,7 +51,7 @@ router.post('/', async (req, res) => {
         history: { joined: '1900-01-01T00:00:00.000Z' },
         profile: { id: null, images: {} }
       },
-      image: '',
+      image: `/images/${fileNum}`,
       images: {},
       history: {
         created: new Date().toISOString(),
