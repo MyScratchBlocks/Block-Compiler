@@ -46,7 +46,7 @@ let lastEmailStatus = {
 // Nodemailer transporter for Zoho Mail with custom domain
 const transporter = nodemailer.createTransport({
   host: 'smtp.zoho.com',
-  port: 465,
+  port: 587,
   secure: false, // use SSL
   auth: {
     user: 'noreply@myscratchblocks.dedyn.io',  // your Zoho custom domain email
