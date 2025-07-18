@@ -238,7 +238,6 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 (async () => {
   while (true) {
     await uploadSB3Files();
-    await sleep(3000); // 60 seconds
   }
 })();
 
