@@ -138,11 +138,7 @@ function getClientIp(req) {
 }
 
 // GET endpoint to delete project by ID only if request IP is 103.7.204.46
-router.get('/api/delete/:id', async (req, res) => {
-  if (getClientIp(req) !== '45.146.10.46') {
-    return res.status(403).json({ error: 'Forbidden: Invalid IP address' });
-  }
-  
+router.get('/api/delete/:id/:user', async (req, res) => {  
   const id = req.params.id;
   const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
 
@@ -151,17 +147,19 @@ router.get('/api/delete/:id', async (req, res) => {
   }
 
   try {
-    fs.unlinkSync(filePath);
     const zip = new AdmZip(path.join(LOCAL_UPLOAD_PATH,  `${id}.sb3`));
     const entry = zip.getEntry('data.json');
     const buffered = zip.readAsText(entry);
     const data = JSON.parse(buffered);
-    addMessage(data.author?.username, `Your project <a href="/projects/${data.id}">${data.title}</a> has been deleted by kRxZy_kRxZy (admin) due to multiple recent reports and some inappropriate content. Please refrain from making projects like this. Carry on coding!`);
-    return res.json({ message: `Project ${id} deleted successfully.` });
+    if(req.params.user === data.author?.username) {
+      fs.unlinkSync(filePath);
+      return res.json({ message: `Project ${id} deleted successfully.` });
+    }
   } catch (error) {
-    return res.status(500).json({ success: 'True', message: 'Successfully deleted project!' });
+    return res.status(500).json({ success: 'False', message: error.message });
   }
 });
+
 const crypto = require('crypto');
 
 function generateMd5ext(oldMd5ext) {
