@@ -170,7 +170,7 @@ router.post('/api/upload/:id', (req, res) => {
   }
 
   const sb3Path = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
-  const imageFilename = `thumbnail.${ext}`;
+  const imageFilename = `/images/${id}`;
 
   if (!fs.existsSync(sb3Path)) {
     return res.status(404).json({ error: 'Project file not found' });
