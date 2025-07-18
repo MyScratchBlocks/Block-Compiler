@@ -35,7 +35,7 @@ function getMimeType(filename) {
     case 'jpg':
     case 'jpeg': return 'image/jpeg';
     case 'gif': return 'image/gif';
-    case 'sb3': return 'application/x.scratch.sb3'; // or 'application/zip'
+    case 'sb3': return 'application/x.scratch.sb3';
     case 'zip': return 'application/zip';
     case 'json': return 'application/json';
     case 'html': return 'text/html';
@@ -43,7 +43,7 @@ function getMimeType(filename) {
   }
 }
 
-// Multipart stream creator with proper MIME type
+// Create multipart stream
 function createMultipartStream(filePath, fieldName, boundary) {
   const fileName = path.basename(filePath);
   const mimeType = getMimeType(fileName);
@@ -63,7 +63,7 @@ function createMultipartStream(filePath, fieldName, boundary) {
   })());
 }
 
-// Calculate multipart content length including headers and footer
+// Calculate multipart content length
 function getContentLength(filePath, boundary) {
   const fileSize = fs.statSync(filePath).size;
   const fileName = path.basename(filePath);
@@ -77,7 +77,7 @@ function getContentLength(filePath, boundary) {
   return headerLength + fileSize + footerLength;
 }
 
-// Upload all files in UPLOAD_DIR
+// Upload all .sb3 files
 async function uploadSB3Files() {
   try {
     if (!fs.existsSync(UPLOAD_DIR)) {
@@ -85,10 +85,9 @@ async function uploadSB3Files() {
       return;
     }
 
-    // Get all files (exclude directories)
-    const files = fs.readdirSync(UPLOAD_DIR).filter(file => {
-      return fs.lstatSync(path.join(UPLOAD_DIR, file)).isFile();
-    });
+    const files = fs.readdirSync(UPLOAD_DIR).filter(file =>
+      fs.lstatSync(path.join(UPLOAD_DIR, file)).isFile()
+    );
 
     if (files.length === 0) {
       log('upload', 'No files to upload.');
@@ -135,7 +134,7 @@ async function uploadSB3Files() {
   }
 }
 
-// Delete all files in a folder (not the folder itself)
+// Delete all files in a folder
 function deleteAllFilesInFolder(folderPath) {
   if (fs.existsSync(folderPath)) {
     fs.readdirSync(folderPath).forEach(file => {
@@ -167,7 +166,7 @@ function deleteFolderRecursive(folderPath) {
   }
 }
 
-// Download and extract .sb3 files from uploads.zip
+// Download and extract .sb3 files
 async function downloadAndExtractNewUploadsAdmZip() {
   try {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -187,6 +186,7 @@ async function downloadAndExtractNewUploadsAdmZip() {
 
     const zip = new AdmZip(zipBuffer);
     const sb3Entries = zip.getEntries();
+
     if (sb3Entries.length === 0) {
       log('extract', 'No .sb3 files found in uploads.zip', 'error');
       downloadStatus.error = 'No .sb3 files found in uploads.zip';
@@ -202,7 +202,6 @@ async function downloadAndExtractNewUploadsAdmZip() {
 
     fs.unlinkSync(zipPath);
     log('cleanup', 'Deleted uploads.zip after extraction.');
-
     downloadStatus.success = true;
   } catch (err) {
     downloadStatus.success = false;
@@ -211,7 +210,7 @@ async function downloadAndExtractNewUploadsAdmZip() {
   }
 }
 
-// Status route with both upload and download results
+// Status route
 router.get('/status', (req, res) => {
   res.json({
     uploadStatus,
@@ -219,7 +218,7 @@ router.get('/status', (req, res) => {
   });
 });
 
-// Optional route to serve uploads.zip if needed
+// Serve uploads.zip if needed
 router.get('/download-uploads-zip', (req, res) => {
   const zipPath = path.join(UPLOAD_DIR, 'uploads.zip');
   if (!fs.existsSync(zipPath)) {
@@ -233,8 +232,14 @@ router.get('/download-uploads-zip', (req, res) => {
   });
 });
 
-while (true) {
-  await uploadSB3Files();
-}
+// Auto loop with delay
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+(async () => {
+  while (true) {
+    await uploadSB3Files();
+    await sleep(3000); // 60 seconds
+  }
+})();
 
 module.exports = router;
