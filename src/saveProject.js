@@ -4,7 +4,7 @@ const AdmZip = require('adm-zip');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawnSync } = require('child_process');
+const puppeteer = require('puppeteer');
 
 const router = express.Router();
 const upload = multer({ dest: 'temp_uploads/' });
@@ -12,61 +12,20 @@ const upload = multer({ dest: 'temp_uploads/' });
 const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
 if (!fs.existsSync(LOCAL_UPLOAD_PATH)) fs.mkdirSync(LOCAL_UPLOAD_PATH, { recursive: true });
 
-function findBrowserExecutable() {
-  const candidates = [
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/chromium',
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files\\Mozilla Firefox\\firefox.exe',
-    'C:\\Program Files (x86)\\Mozilla Firefox\\firefox.exe',
-  ];
-  for (const p of candidates) {
-    try {
-      if (fs.existsSync(p)) return p;
-    } catch {}
-  }
-  return null;
+// Puppeteer-based screenshot function
+async function screenshotWithBrowser(htmlPath, screenshotPath) {
+  const browser = await puppeteer.launch({ headless: 'new' });
+  const page = await browser.newPage();
+  await page.goto(`file://${htmlPath}`, { waitUntil: 'networkidle0' });
+
+  // Wait 5 seconds to allow iframe to fully load
+  await new Promise(resolve => setTimeout(resolve, 5000));
+
+  await page.screenshot({ path: screenshotPath });
+  await browser.close();
 }
 
-function screenshotWithBrowser(browserPath, htmlPath, screenshotPath) {
-  const browserName = path.basename(browserPath).toLowerCase();
-
-  if (browserName.includes('chrome') || browserName.includes('chromium') || browserName.includes('msedge')) {
-    const args = [
-      '--headless',
-      '--disable-gpu',
-      '--window-size=480,360',
-      '--hide-scrollbars',
-      `--screenshot=${screenshotPath}`,
-      `file://${htmlPath}`,
-    ];
-    const result = spawnSync(browserPath, args, { stdio: 'inherit' });
-    if (result.error) throw result.error;
-  } else if (browserName.includes('firefox')) {
-    const args = [
-      '-headless',
-      '-screenshot',
-      screenshotPath,
-      '-width',
-      '480',
-      '-height',
-      '360',
-      htmlPath.startsWith('file://') ? htmlPath : `file://${htmlPath}`,
-    ];
-    const result = spawnSync(browserPath, args, { stdio: 'inherit' });
-    if (result.error) throw result.error;
-  } else {
-    throw new Error(`Unsupported browser for screenshot: ${browserName}`);
-  }
-}
-
-// New endpoint to serve the raw SB3 project by id
+// Serve raw .sb3 project
 router.get('/projectSb3/:id', (req, res) => {
   const { id } = req.params;
   const projectPath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
@@ -79,7 +38,8 @@ router.get('/projectSb3/:id', (req, res) => {
   res.sendFile(projectPath);
 });
 
-router.post('/:id/save', upload.single('project'), (req, res) => {
+// Save project and generate screenshot
+router.post('/:id/save', upload.single('project'), async (req, res) => {
   const { id } = req.params;
   const sb3Blob = req.file;
   const { projectName } = req.body;
@@ -120,7 +80,7 @@ router.post('/:id/save', upload.single('project'), (req, res) => {
 
     fs.writeFileSync(path.join(tempDir, `${id}.sb3`), newZip.toBuffer());
 
-    // New HTML content embedding TurboWarp iframe
+    // Generate embed HTML
     const turboWarpEmbedUrl = `https://turbowarp.org/embed?project_url=https://editor-compiler.onrender.com/projectSb3/${id}`;
     const htmlContent = `<!DOCTYPE html>
 <html>
@@ -128,7 +88,7 @@ router.post('/:id/save', upload.single('project'), (req, res) => {
   <meta charset="UTF-8" />
   <title>TurboWarp Embed Screenshot</title>
   <style>
-    body,html { margin:0; padding:0; overflow:hidden; background:#fff; }
+    body, html { margin:0; padding:0; overflow:hidden; background:#fff; }
     iframe { border:none; width:480px; height:360px; }
   </style>
 </head>
@@ -139,16 +99,15 @@ router.post('/:id/save', upload.single('project'), (req, res) => {
 
     fs.writeFileSync(tempHtmlPath, htmlContent);
 
-    const browserPath = findBrowserExecutable();
-    if (!browserPath) throw new Error('No supported browser found on the system for screenshot.');
-
-    screenshotWithBrowser(browserPath, tempHtmlPath, screenshotPath);
+    // Take screenshot using Puppeteer
+    await screenshotWithBrowser(tempHtmlPath, screenshotPath);
 
     const screenshotBuffer = fs.readFileSync(screenshotPath);
     newZip.addFile(`${id}.png`, screenshotBuffer);
 
     newZip.writeZip(destPath);
 
+    // Cleanup
     fs.unlinkSync(sb3Blob.path);
     fs.rmSync(tempDir, { recursive: true, force: true });
 
