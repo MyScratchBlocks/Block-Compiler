@@ -150,6 +150,7 @@ router.put('/api/share/:id', (req, res) => {
 });
 
 // ────────────────────────────────────────────────
+// POST image upload
 router.post('/api/upload/:id', (req, res) => {
   const { id } = req.params;
 
@@ -176,8 +177,23 @@ router.post('/api/upload/:id', (req, res) => {
   }
 
   const chunks = [];
-  req.on('data', chunk => chunks.push(chunk));
+  let totalSize = 0;
+  const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+
+  req.on('data', chunk => {
+    totalSize += chunk.length;
+    if (totalSize > MAX_IMAGE_SIZE) {
+      req.destroy();
+      return;
+    }
+    chunks.push(chunk);
+  });
+
   req.on('end', () => {
+    if (totalSize > MAX_IMAGE_SIZE) {
+      return res.status(413).json({ error: 'Image too large' });
+    }
+
     const imageBuffer = Buffer.concat(chunks);
     try {
       const zip = new AdmZip(sb3Path);
@@ -188,9 +204,9 @@ router.post('/api/upload/:id', (req, res) => {
       data.image = imageFilename;
 
       zip.deleteFile('data.json');
+      zip.deleteFile(imageFilename); // ensure we replace old image
       zip.addFile('data.json', Buffer.from(JSON.stringify(data, null, 2)));
       zip.addFile(imageFilename, imageBuffer);
-
       zip.writeZip(sb3Path);
 
       res.json({
