@@ -4,7 +4,7 @@ const AdmZip = require('adm-zip');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { execSync, spawnSync } = require('child_process');
+const { spawnSync } = require('child_process');
 
 const router = express.Router();
 const upload = multer({ dest: 'temp_uploads/' });
@@ -12,16 +12,13 @@ const upload = multer({ dest: 'temp_uploads/' });
 const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
 if (!fs.existsSync(LOCAL_UPLOAD_PATH)) fs.mkdirSync(LOCAL_UPLOAD_PATH, { recursive: true });
 
-/** Detect available browser executable paths for screenshotting */
 function findBrowserExecutable() {
   const candidates = [
-    // Linux / macOS paths
     '/usr/bin/google-chrome',
     '/usr/bin/chromium-browser',
     '/usr/bin/chromium',
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    // Windows paths
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
@@ -41,7 +38,6 @@ function screenshotWithBrowser(browserPath, htmlPath, screenshotPath) {
   const browserName = path.basename(browserPath).toLowerCase();
 
   if (browserName.includes('chrome') || browserName.includes('chromium') || browserName.includes('msedge')) {
-    // Chrome, Chromium, Edge support --headless --screenshot
     const args = [
       '--headless',
       '--disable-gpu',
@@ -53,7 +49,6 @@ function screenshotWithBrowser(browserPath, htmlPath, screenshotPath) {
     const result = spawnSync(browserPath, args, { stdio: 'inherit' });
     if (result.error) throw result.error;
   } else if (browserName.includes('firefox')) {
-    // Firefox CLI screenshot: --headless -s <file> -w <width> -h <height> <url>
     const args = [
       '-headless',
       '-screenshot',
@@ -70,6 +65,19 @@ function screenshotWithBrowser(browserPath, htmlPath, screenshotPath) {
     throw new Error(`Unsupported browser for screenshot: ${browserName}`);
   }
 }
+
+// New endpoint to serve the raw SB3 project by id
+router.get('/projectSb3/:id', (req, res) => {
+  const { id } = req.params;
+  const projectPath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
+
+  if (!fs.existsSync(projectPath)) {
+    return res.status(404).send('Project not found');
+  }
+
+  res.setHeader('Content-Type', 'application/x.scratch.sb3');
+  res.sendFile(projectPath);
+});
 
 router.post('/:id/save', upload.single('project'), (req, res) => {
   const { id } = req.params;
@@ -108,35 +116,24 @@ router.post('/:id/save', upload.single('project'), (req, res) => {
 
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scratch-'));
     const tempHtmlPath = path.join(tempDir, 'index.html');
-    const tempSb3Path = path.join(tempDir, 'project.sb3');
     const screenshotPath = path.join(tempDir, `${id}.png`);
 
-    fs.writeFileSync(tempSb3Path, newZip.toBuffer());
+    fs.writeFileSync(path.join(tempDir, `${id}.sb3`), newZip.toBuffer());
 
+    // New HTML content embedding TurboWarp iframe
+    const turboWarpEmbedUrl = `https://turbowarp.org/embed?project_url=https://editor-compiler.onrender.com/projectSb3/${id}`;
     const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8" />
-<title>Scratch Stage Renderer</title>
-<script src="https://unpkg.com/scratch-vm@0.2.0/dist/web/scratch-vm.min.js"></script>
-<script src="https://unpkg.com/scratch-render@0.1.0/dist/web/scratch-render.min.js"></script>
-<style>body,html { margin:0; padding:0; overflow:hidden; background:#fff; }
-canvas { display:block; }</style>
+  <meta charset="UTF-8" />
+  <title>TurboWarp Embed Screenshot</title>
+  <style>
+    body,html { margin:0; padding:0; overflow:hidden; background:#fff; }
+    iframe { border:none; width:480px; height:360px; }
+  </style>
 </head>
 <body>
-<canvas id="scratch-canvas" width="480" height="360"></canvas>
-<script>
-  const vm = new window.VirtualMachine();
-  const canvas = document.getElementById('scratch-canvas');
-  const renderer = new window.RenderWebGL(canvas);
-  vm.attachRenderer(renderer);
-  vm.setCompatibilityMode(true);
-  vm.start();
-  fetch('project.sb3')
-    .then(res => res.arrayBuffer())
-    .then(buffer => vm.loadProject(buffer))
-    .then(() => vm.greenFlag());
-</script>
+  <iframe src="${turboWarpEmbedUrl}" allowfullscreen></iframe>
 </body>
 </html>`;
 
@@ -155,7 +152,7 @@ canvas { display:block; }</style>
     fs.unlinkSync(sb3Blob.path);
     fs.rmSync(tempDir, { recursive: true, force: true });
 
-    res.json({ message: 'Project updated with embedded screenshot', id, updatedTitle: dataJson.title });
+    res.json({ message: 'Project updated with TurboWarp screenshot', id, updatedTitle: dataJson.title });
   } catch (err) {
     console.error('Error saving project:', err);
     if (sb3Blob && fs.existsSync(sb3Blob.path)) fs.unlinkSync(sb3Blob.path);
