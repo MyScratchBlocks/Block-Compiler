@@ -150,7 +150,6 @@ router.put('/api/share/:id', (req, res) => {
 });
 
 // ────────────────────────────────────────────────
-// POST upload thumbnail and update data.json
 router.post('/api/upload/:id', (req, res) => {
   const { id } = req.params;
 
@@ -170,63 +169,76 @@ router.post('/api/upload/:id', (req, res) => {
   }
 
   const sb3Path = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
-  const imageFilename = `${id}.${ext}`;
-  const imagePath = path.join(LOCAL_UPLOAD_PATH, imageFilename);
-  const imageUrl = `/images/${imageFilename}`;
+  const imageFilename = `thumbnail.${ext}`;
 
-  try {
-    fs.accessSync(sb3Path, fs.constants.F_OK);
-
-    const writeStream = fs.createWriteStream(imagePath);
-    req.pipe(writeStream);
-
-    writeStream.on('error', (err) => {
-      console.error('Image save error:', err.stack || err.message);
-      return res.status(500).json({ error: 'Failed to save thumbnail' });
-    });
-
-    writeStream.on('finish', () => {
-      try {
-        const zip = new AdmZip(sb3Path);
-        const entry = zip.getEntry('data.json');
-
-        if (!entry) {
-          return res.status(404).json({ error: 'data.json not found in project file' });
-        }
-
-        let data = JSON.parse(entry.getData().toString('utf-8'));
-        data.image = imageUrl;
-
-        zip.deleteFile('data.json');
-        zip.addFile('data.json', Buffer.from(JSON.stringify(data, null, 2)));
-        zip.writeZip(sb3Path);
-
-        return res.json({
-          success: true,
-          message: 'Thumbnail uploaded and data.json updated',
-          thumbnailUrl: imageUrl
-        });
-      } catch (err) {
-        console.error('ZIP update error:', err.stack || err.message);
-        return res.status(500).json({ error: 'Failed to update data.json' });
-      }
-    });
-  } catch (err) {
-    console.error('Upload handler error:', err.stack || err.message);
-    return res.status(500).json({ error: 'Project file not found or upload failed' });
+  if (!fs.existsSync(sb3Path)) {
+    return res.status(404).json({ error: 'Project file not found' });
   }
+
+  const chunks = [];
+  req.on('data', chunk => chunks.push(chunk));
+  req.on('end', () => {
+    const imageBuffer = Buffer.concat(chunks);
+    try {
+      const zip = new AdmZip(sb3Path);
+      const entry = zip.getEntry('data.json');
+      if (!entry) return res.status(404).json({ error: 'data.json not found in project file' });
+
+      const data = JSON.parse(entry.getData().toString('utf-8'));
+      data.image = imageFilename;
+
+      zip.deleteFile('data.json');
+      zip.addFile('data.json', Buffer.from(JSON.stringify(data, null, 2)));
+      zip.addFile(imageFilename, imageBuffer);
+
+      zip.writeZip(sb3Path);
+
+      res.json({
+        success: true,
+        message: 'Thumbnail uploaded and stored inside .sb3',
+        thumbnailUrl: `/images/${id}`
+      });
+    } catch (err) {
+      console.error('ZIP update error:', err);
+      res.status(500).json({ error: 'Failed to update .sb3 file' });
+    }
+  });
+
+  req.on('error', err => {
+    console.error('Request error:', err);
+    res.status(500).json({ error: 'Upload failed' });
+  });
 });
 
 // ────────────────────────────────────────────────
 // GET image by ID
 router.get('/images/:id', (req, res) => {
   const { id } = req.params;
-  const imagePath = path.join(LOCAL_UPLOAD_PATH, `${id}`);
-  if (fs.existsSync(imagePath)) {
-    return res.sendFile(imagePath);
+  const sb3Path = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
+
+  if (!fs.existsSync(sb3Path)) {
+    return res.status(404).json({ error: 'Project file not found' });
   }
 
-  return res.status(404).json({ error: 'Image not found' });
+  try {
+    const zip = new AdmZip(sb3Path);
+    const entry = zip.getEntry('data.json');
+    if (!entry) return res.status(404).json({ error: 'data.json not found' });
+
+    const data = JSON.parse(entry.getData().toString('utf-8'));
+    const imageFilename = data.image;
+    if (!imageFilename) return res.status(404).json({ error: 'Image not referenced in data.json' });
+
+    const imageEntry = zip.getEntry(imageFilename);
+    if (!imageEntry) return res.status(404).json({ error: 'Image not found in project file' });
+
+    const ext = path.extname(imageFilename).substring(1);
+    res.setHeader('Content-Type', `image/${ext === 'jpg' ? 'jpeg' : ext}`);
+    res.send(imageEntry.getData());
+  } catch (err) {
+    console.error('Image retrieval error:', err);
+    res.status(500).json({ error: 'Failed to extract image' });
+  }
 });
 
 module.exports = router;
