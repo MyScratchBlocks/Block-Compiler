@@ -232,9 +232,17 @@ router.get('/download-uploads-zip', (req, res) => {
   });
 });
 
-// Auto loop with delay
-while (true) {
-  await uploadSB3Files();
+async function startUploadLoop() {
+  while (true) {
+    await uploadSB3Files();
+    await new Promise(resolve => setTimeout(resolve, 10_000)); // 10 seconds delay
+  }
 }
+
+// Start loop only after Express is initialized
+startUploadLoop().catch(err => {
+  console.error('Upload loop failed:', err);
+  log('Backup', err);
+});
 
 module.exports = router;
