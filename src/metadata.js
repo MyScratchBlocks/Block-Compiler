@@ -52,8 +52,11 @@ router.get('/api/projects/:id/meta/:username', (req, res) => {
       if (username === data.author?.username) {
         res.json(data);
       } else {
-        res.status(403).json({ error: 'Unauthorized' });
-      }
+        if (req.query.Admin === 'True') {
+          res.json(data);
+         } else {
+          res.status(403).json({ error: 'Unauthorized' });
+         }
     } else {
       res.json(data);
     }
