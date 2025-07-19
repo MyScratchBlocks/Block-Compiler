@@ -16,14 +16,25 @@ if (!fs.existsSync(LOCAL_UPLOAD_PATH)) fs.mkdirSync(LOCAL_UPLOAD_PATH, { recursi
 async function screenshotWithBrowser(htmlPath, screenshotPath) {
   const browser = await puppeteer.launch({ headless: 'new' });
   const page = await browser.newPage();
+  // Load the HTML file
   await page.goto(`file://${htmlPath}`, { waitUntil: 'networkidle0' });
-
-  // Wait 5 seconds to allow iframe to fully load
-  await new Promise(resolve => setTimeout(resolve, 5000));
-
+  // Wait for iframe to appear
+  await page.waitForSelector('iframe');
+  // Get the iframe element
+  const iframeElement = await page.$('iframe');
+  const iframe = await iframeElement.contentFrame();
+  // Wait for iframe's internal page to fully load
+  await iframe.waitForFunction(
+    () => document.readyState === 'complete',
+    { timeout: 15000 }
+  );
+  // Optionally wait a bit more for things like sprites or assets to finish rendering
+  await page.waitForTimeout(3000); // optional delay
+  // Screenshot the visible part of the page
   await page.screenshot({ path: screenshotPath });
   await browser.close();
 }
+
 
 // Serve raw .sb3 project
 router.get('/projectSb3/:id', (req, res) => {
@@ -81,7 +92,7 @@ router.post('/:id/save', upload.single('project'), async (req, res) => {
     fs.writeFileSync(path.join(tempDir, `${id}.sb3`), newZip.toBuffer());
 
     // Generate embed HTML
-    const turboWarpEmbedUrl = `https://myscratchblocks.ddns.net/scratch-gui/embed?project_url=https://editor-compiler.onrender.com/projectSb3/${id}`;
+    const turboWarpEmbedUrl = `https://myscratchblocks.ddns.net/scratch-gui/embed#${id}?admin=True`;
     const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
