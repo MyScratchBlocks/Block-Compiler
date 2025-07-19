@@ -26,15 +26,18 @@ function setNestedValue(obj, path, value) {
   current[keys[keys.length - 1]] = value;
 }
 
-// ────────────────────────────────────────────────
-// GET project metadata
-router.get('/api/projects/:id/meta/:username', (req, res) => {
-  const { id, username } = req.params;
-
-  if (!/^\d+$/.test(id)) {
+// Middleware to validate numeric ID
+function validateProjectId(req, res, next) {
+  if (!/^\d+$/.test(req.params.id)) {
     return res.status(400).json({ error: 'Invalid project ID format' });
   }
+  next();
+}
 
+// ────────────────────────────────────────────────
+// GET project metadata
+router.get('/api/projects/:id/meta/:username', validateProjectId, (req, res) => {
+  const { id, username } = req.params;
   const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
 
   try {
@@ -49,17 +52,14 @@ router.get('/api/projects/:id/meta/:username', (req, res) => {
     const data = JSON.parse(entry.getData().toString('utf-8'));
 
     if (data.visibility === 'unshared') {
-      if (username === data.author?.username) {
-        res.json(data);
+      if (username === data.author?.username || req.query.Admin === 'True') {
+        return res.json(data);
       } else {
-        if (req.query.Admin === 'True') {
-          res.json(data);
-         } else {
-          res.status(403).json({ error: 'Unauthorized' });
-         }
-    } else {
-      res.json(data);
+        return res.status(403).json({ error: 'Unauthorized' });
+      }
     }
+
+    return res.json(data);
   } catch (err) {
     console.error('Metadata read error:', err.stack || err.message);
     return res.status(500).json({ error: 'Failed to read project metadata' });
@@ -68,14 +68,9 @@ router.get('/api/projects/:id/meta/:username', (req, res) => {
 
 // ────────────────────────────────────────────────
 // PUT project metadata
-router.put('/api/projects/:id/meta', (req, res) => {
+router.put('/api/projects/:id/meta', validateProjectId, (req, res) => {
   const { id } = req.params;
   const updates = req.body;
-
-  if (!/^\d+$/.test(id)) {
-    return res.status(400).json({ error: 'Invalid project ID format' });
-  }
-
   const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
 
   try {
@@ -111,13 +106,8 @@ router.put('/api/projects/:id/meta', (req, res) => {
 
 // ────────────────────────────────────────────────
 // PUT share project
-router.put('/api/share/:id', (req, res) => {
+router.put('/api/share/:id', validateProjectId, (req, res) => {
   const { id } = req.params;
-
-  if (!/^\d+$/.test(id)) {
-    return res.status(400).json({ error: 'Invalid project ID format' });
-  }
-
   const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
 
   try {
@@ -129,13 +119,7 @@ router.put('/api/share/:id', (req, res) => {
       return res.status(404).json({ error: 'data.json not found in project file' });
     }
 
-    let data;
-    try {
-      data = JSON.parse(entry.getData().toString('utf-8'));
-    } catch (parseErr) {
-      return res.status(500).json({ error: 'Failed to parse existing project metadata' });
-    }
-
+    let data = JSON.parse(entry.getData().toString('utf-8'));
     data.visibility = 'visible';
 
     zip.deleteFile('data.json');
@@ -152,14 +136,10 @@ router.put('/api/share/:id', (req, res) => {
   }
 });
 
-// PUT share project
-router.put('/api/unshare/:id', (req, res) => {
+// ────────────────────────────────────────────────
+// PUT unshare project
+router.put('/api/unshare/:id', validateProjectId, (req, res) => {
   const { id } = req.params;
-
-  if (!/^\d+$/.test(id)) {
-    return res.status(400).json({ error: 'Invalid project ID format' });
-  }
-
   const filePath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
 
   try {
@@ -171,39 +151,29 @@ router.put('/api/unshare/:id', (req, res) => {
       return res.status(404).json({ error: 'data.json not found in project file' });
     }
 
-    let data;
-    try {
-      data = JSON.parse(entry.getData().toString('utf-8'));
-    } catch (parseErr) {
-      return res.status(500).json({ error: 'Failed to parse existing project metadata' });
-    }
-
+    let data = JSON.parse(entry.getData().toString('utf-8'));
     data.visibility = 'unshared';
 
     zip.deleteFile('data.json');
     zip.addFile('data.json', Buffer.from(JSON.stringify(data, null, 2)));
     zip.writeZip(filePath);
 
-    res.json({ success: true, message: `Project ${id} visibility set to 'visible'` });
+    res.json({ success: true, message: `Project ${id} visibility set to 'unshared'` });
   } catch (err) {
     if (err.code === 'ENOENT') {
       return res.status(404).json({ error: 'Project file not found' });
     }
-    console.error('Share project error:', err.stack || err.message);
-    return res.status(500).json({ error: 'Failed to share project' });
+    console.error('Unshare project error:', err.stack || err.message);
+    return res.status(500).json({ error: 'Failed to unshare project' });
   }
 });
 
 // ────────────────────────────────────────────────
 // POST image upload
-router.post('/api/upload/:id', (req, res) => {
+router.post('/api/upload/:id', validateProjectId, (req, res) => {
   const { id } = req.params;
-
-  if (!/^\d+$/.test(id)) {
-    return res.status(400).json({ error: 'Invalid project ID format' });
-  }
-
   const contentType = req.headers['content-type'];
+
   if (!contentType || !contentType.startsWith('image/')) {
     return res.status(400).json({ error: 'Content-Type must be an image type' });
   }
@@ -223,7 +193,7 @@ router.post('/api/upload/:id', (req, res) => {
 
   const chunks = [];
   let totalSize = 0;
-  const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+  const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
   req.on('data', chunk => {
     totalSize += chunk.length;
@@ -249,7 +219,7 @@ router.post('/api/upload/:id', (req, res) => {
       data.image = imageFilename;
 
       zip.deleteFile('data.json');
-      zip.deleteFile(imageFilename); // ensure we replace old image
+      zip.deleteFile(imageFilename);
       zip.addFile('data.json', Buffer.from(JSON.stringify(data, null, 2)));
       zip.addFile(imageFilename, imageBuffer);
       zip.writeZip(sb3Path);
@@ -273,7 +243,7 @@ router.post('/api/upload/:id', (req, res) => {
 
 // ────────────────────────────────────────────────
 // GET image by ID
-router.get('/images/:id', (req, res) => {
+router.get('/images/:id', validateProjectId, (req, res) => {
   const { id } = req.params;
   const sb3Path = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
 
