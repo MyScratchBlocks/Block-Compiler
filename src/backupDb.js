@@ -4,6 +4,7 @@ const path = require('path');
 const axios = require('axios');
 const AdmZip = require('adm-zip');
 const { Readable } = require('stream');
+const fsSync = require('fs');
 
 const router = express.Router();
 
@@ -23,9 +24,9 @@ function log(tag, message, level = 'info') {
   const label = `[${tag.toUpperCase()}]`;
   const formatted = `[${timestamp}] ${label} ${message}`;
   downloadStatus.logs.push(formatted);
+  console.log(formatted); // also print to console
 }
 
-// MIME type lookup
 function getMimeType(filename) {
   const ext = filename.toLowerCase().split('.').pop();
   switch (ext) {
@@ -52,7 +53,7 @@ function createMultipartStream(filePath, fieldName, boundary) {
     `Content-Type: ${mimeType}\r\n\r\n`
   );
   const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
-  const fileStream = fs.createReadStream(filePath);
+  const fileStream = fsSync.createReadStream(filePath);
 
   return Readable.from((async function* () {
     yield headers;
@@ -62,7 +63,7 @@ function createMultipartStream(filePath, fieldName, boundary) {
 }
 
 function getContentLength(filePath, boundary) {
-  const stats = require('fs').statSync(filePath);
+  const stats = fsSync.statSync(filePath);
   const fileSize = stats.size;
   const fileName = path.basename(filePath);
   const mimeType = getMimeType(fileName);
@@ -77,61 +78,58 @@ function getContentLength(filePath, boundary) {
 
 async function uploadSB3Files() {
   try {
-    try {
-      await fs.access(UPLOAD_DIR);
-    } catch {
-      log('upload', 'UPLOAD_DIR does not exist.');
-      return;
-    }
+    await fs.access(UPLOAD_DIR);
+  } catch {
+    log('upload', 'UPLOAD_DIR does not exist.');
+    return;
+  }
 
-    const files = (await fs.readdir(UPLOAD_DIR)).filter(async file => {
-      const stat = await fs.lstat(path.join(UPLOAD_DIR, file));
-      return stat.isFile();
-    });
-
-    if (files.length === 0) {
-      log('upload', 'No files to upload.');
-      return;
-    }
-
-    log('upload', `Uploading ${files.length} file(s)...`);
-    uploadStatus = {};
-
-    // Upload files concurrently
-    await Promise.all(files.map(async file => {
-      const filePath = path.join(UPLOAD_DIR, file);
-      const boundary = '----ScratchGemsBoundary';
-      const contentLength = getContentLength(filePath, boundary);
-      const stream = createMultipartStream(filePath, 'file', boundary);
-
-      try {
-        const response = await axios.post(`${SERVER_URL}/upload/compiler`, stream, {
-          headers: {
-            'Content-Type': `multipart/form-data; boundary=${boundary}`,
-            'Content-Length': contentLength,
-          },
-          maxBodyLength: Infinity,
-        });
-
-        uploadStatus[file] = { status: 'success', response: response.data };
-        log('upload', `${file} uploaded successfully.`);
-      } catch (err) {
-        uploadStatus[file] = { status: 'failed', error: err.message };
-        log('upload', `${file} failed to upload: ${err.message}`, 'error');
-      }
-    }));
-
-    const allSuccessful = Object.values(uploadStatus).every(s => s.status === 'success');
-
-    if (allSuccessful) {
-      log('upload', 'All files uploaded successfully. Cleaning up and downloading new files...');
-      await deleteAllFilesInFolder(UPLOAD_DIR);
-      await downloadAndExtractNewUploadsAdmZip();
-    } else {
-      log('upload', 'One or more files failed to upload.', 'error');
-    }
+  let files = [];
+  try {
+    files = (await fs.readdir(UPLOAD_DIR)).filter(f => f.toLowerCase().endsWith('.sb3'));
   } catch (err) {
-    log('upload', `Unexpected error: ${err.message}`, 'error');
+    log('upload', `Error reading upload directory: ${err.message}`, 'error');
+    return;
+  }
+
+  if (files.length === 0) {
+    log('upload', 'No .sb3 files to upload.');
+    return;
+  }
+
+  log('upload', `Uploading ${files.length} .sb3 file(s)...`);
+  uploadStatus = {};
+
+  await Promise.all(files.map(async (file) => {
+    const filePath = path.join(UPLOAD_DIR, file);
+    const boundary = '----ScratchGemsBoundary';
+    const contentLength = getContentLength(filePath, boundary);
+    const stream = createMultipartStream(filePath, 'file', boundary);
+
+    try {
+      const response = await axios.post(`${SERVER_URL}/upload/compiler`, stream, {
+        headers: {
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': contentLength,
+        },
+        maxBodyLength: Infinity,
+      });
+
+      uploadStatus[file] = { status: 'success', response: response.data };
+      log('upload', `${file} uploaded successfully.`);
+    } catch (err) {
+      uploadStatus[file] = { status: 'failed', error: err.message };
+      log('upload', `${file} failed to upload: ${err.message}`, 'error');
+    }
+  }));
+
+  const allSuccessful = Object.values(uploadStatus).every(s => s.status === 'success');
+  if (allSuccessful) {
+    log('upload', 'All files uploaded successfully. Cleaning up and downloading new files...');
+    await deleteAllFilesInFolder(UPLOAD_DIR);
+    await downloadAndExtractNewUploadsAdmZip();
+  } else {
+    log('upload', 'One or more files failed to upload.', 'error');
   }
 }
 
@@ -197,7 +195,6 @@ async function downloadAndExtractNewUploadsAdmZip() {
 
     const extractedFileNames = [];
 
-    // Extract asynchronously in parallel
     await Promise.all(entries.map(async entry => {
       if (entry.isDirectory) return;
       const filename = path.basename(entry.entryName);
@@ -207,7 +204,7 @@ async function downloadAndExtractNewUploadsAdmZip() {
       log('extract', `Extracted ${filename}`);
     }));
 
-    // Cleanup old files
+    // Delete old files not extracted this time
     const currentFiles = await fs.readdir(UPLOAD_DIR);
     await Promise.all(currentFiles.map(async file => {
       if (!extractedFileNames.includes(file)) {
@@ -250,14 +247,13 @@ router.get('/download-uploads-zip', async (req, res) => {
 async function startUploadLoop() {
   while (true) {
     await uploadSB3Files();
-    // Very short delay to avoid event loop starvation, but practically minimal
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 100)); // minimal delay
   }
 }
 
 startUploadLoop().catch(err => {
   console.error('Upload loop failed:', err);
-  log('Backup', err.message);
+  log('backup', err.message, 'error');
 });
 
 module.exports = router;
