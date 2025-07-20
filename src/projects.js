@@ -45,21 +45,22 @@ router.get('/api/projects', async (req, res) => {
           return null;
         }
 
-        if (data.visibility == 'visible') {
+        if (data.visibility === 'visible') {
           const favourites = Number(data.stats?.favourites || 0);
           const loves = Number(data.stats?.loves || 0);
           const views = Number(data.stats?.views || 0);
-          const popularity = favorites + loves + views;
+          const popularity = favourites + loves + views;
 
           return {
             id: data.id || projectId,
             name: data.title || 'Untitled',
-            image: data.image || '',
+            image: data.image,
             author: data.author?.username || 'Unknown User',
             link: `https://myscratchblocks.github.io/projects/#${data.id || projectId}`,
             popularity
           };
         }
+
         return null;
       } catch (zipError) {
         console.warn(`[WARN] Skipping ${file} due to error: ${zipError.message}`);
@@ -70,7 +71,7 @@ router.get('/api/projects', async (req, res) => {
     const results = await Promise.all(projectPromises);
     const filteredProjects = results.filter(project => project !== null);
 
-    // Sort by popularity (favourites + loves) in descending order
+    // Sort by popularity (favourites + loves + views) in descending order
     filteredProjects.sort((a, b) => b.popularity - a.popularity);
 
     // Return full list including popularity
