@@ -56,7 +56,7 @@ router.get('/api/projects', async (req, res) => {
             name: data.title || 'Untitled',
             image: data.image,
             author: data.author?.username || 'Unknown User',
-            link: `https://myscratchblocks.github.io/projects/#${data.id || projectId}`,
+            link: `https://myscratchblocks.onrender.com/projects/#${data.id || projectId}`,
             popularity
           };
         }
