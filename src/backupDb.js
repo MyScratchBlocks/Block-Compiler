@@ -264,6 +264,7 @@ async function startUploadLoop() {
   }
 }
 
+downloadAndExtractNewUploadsAdmZip();
 startUploadLoop().catch(err => {
   console.error('Upload loop failed:', err);
   log('backup', err.message, 'error');
