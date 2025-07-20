@@ -1,5 +1,5 @@
 const express = require('express');
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 const axios = require('axios');
 const AdmZip = require('adm-zip');
@@ -18,7 +18,6 @@ let downloadStatus = {
   logs: [],
 };
 
-// Logging helper with timestamp
 function log(tag, message, level = 'info') {
   const timestamp = new Date().toISOString();
   const label = `[${tag.toUpperCase()}]`;
@@ -26,7 +25,7 @@ function log(tag, message, level = 'info') {
   downloadStatus.logs.push(formatted);
 }
 
-// Simple MIME type lookup without extra modules
+// MIME type lookup
 function getMimeType(filename) {
   const ext = filename.toLowerCase().split('.').pop();
   switch (ext) {
@@ -43,7 +42,6 @@ function getMimeType(filename) {
   }
 }
 
-// Create multipart stream
 function createMultipartStream(filePath, fieldName, boundary) {
   const fileName = path.basename(filePath);
   const mimeType = getMimeType(fileName);
@@ -63,9 +61,9 @@ function createMultipartStream(filePath, fieldName, boundary) {
   })());
 }
 
-// Calculate multipart content length
 function getContentLength(filePath, boundary) {
-  const fileSize = fs.statSync(filePath).size;
+  const stats = require('fs').statSync(filePath);
+  const fileSize = stats.size;
   const fileName = path.basename(filePath);
   const mimeType = getMimeType(fileName);
   const headerLength = Buffer.byteLength(
@@ -77,17 +75,19 @@ function getContentLength(filePath, boundary) {
   return headerLength + fileSize + footerLength;
 }
 
-// Upload all .sb3 files
 async function uploadSB3Files() {
   try {
-    if (!fs.existsSync(UPLOAD_DIR)) {
+    try {
+      await fs.access(UPLOAD_DIR);
+    } catch {
       log('upload', 'UPLOAD_DIR does not exist.');
       return;
     }
 
-    const files = fs.readdirSync(UPLOAD_DIR).filter(file =>
-      fs.lstatSync(path.join(UPLOAD_DIR, file)).isFile()
-    );
+    const files = (await fs.readdir(UPLOAD_DIR)).filter(async file => {
+      const stat = await fs.lstat(path.join(UPLOAD_DIR, file));
+      return stat.isFile();
+    });
 
     if (files.length === 0) {
       log('upload', 'No files to upload.');
@@ -97,7 +97,8 @@ async function uploadSB3Files() {
     log('upload', `Uploading ${files.length} file(s)...`);
     uploadStatus = {};
 
-    for (const file of files) {
+    // Upload files concurrently
+    await Promise.all(files.map(async file => {
       const filePath = path.join(UPLOAD_DIR, file);
       const boundary = '----ScratchGemsBoundary';
       const contentLength = getContentLength(filePath, boundary);
@@ -118,13 +119,13 @@ async function uploadSB3Files() {
         uploadStatus[file] = { status: 'failed', error: err.message };
         log('upload', `${file} failed to upload: ${err.message}`, 'error');
       }
-    }
+    }));
 
     const allSuccessful = Object.values(uploadStatus).every(s => s.status === 'success');
 
     if (allSuccessful) {
       log('upload', 'All files uploaded successfully. Cleaning up and downloading new files...');
-      deleteAllFilesInFolder(UPLOAD_DIR);
+      await deleteAllFilesInFolder(UPLOAD_DIR);
       await downloadAndExtractNewUploadsAdmZip();
     } else {
       log('upload', 'One or more files failed to upload.', 'error');
@@ -134,42 +135,47 @@ async function uploadSB3Files() {
   }
 }
 
-// Delete all files in a folder
-function deleteAllFilesInFolder(folderPath) {
-  if (fs.existsSync(folderPath)) {
-    fs.readdirSync(folderPath).forEach(file => {
-      const curPath = path.join(folderPath, file);
-      if (fs.lstatSync(curPath).isDirectory()) {
-        deleteFolderRecursive(curPath);
+async function deleteAllFilesInFolder(folderPath) {
+  try {
+    const files = await fs.readdir(folderPath);
+    await Promise.all(files.map(async file => {
+      const fullPath = path.join(folderPath, file);
+      const stat = await fs.lstat(fullPath);
+      if (stat.isDirectory()) {
+        await deleteFolderRecursive(fullPath);
       } else {
-        fs.unlinkSync(curPath);
-        log('fs', `Deleted file: ${curPath}`);
+        await fs.unlink(fullPath);
+        log('fs', `Deleted file: ${fullPath}`);
       }
-    });
+    }));
     log('fs', 'All files deleted from UPLOAD_DIR.');
+  } catch (err) {
+    log('fs', `Error deleting files: ${err.message}`, 'error');
   }
 }
 
-// Recursively delete a folder
-function deleteFolderRecursive(folderPath) {
-  if (fs.existsSync(folderPath)) {
-    fs.readdirSync(folderPath).forEach(file => {
+async function deleteFolderRecursive(folderPath) {
+  try {
+    const files = await fs.readdir(folderPath);
+    await Promise.all(files.map(async file => {
       const curPath = path.join(folderPath, file);
-      if (fs.lstatSync(curPath).isDirectory()) {
-        deleteFolderRecursive(curPath);
+      const stat = await fs.lstat(curPath);
+      if (stat.isDirectory()) {
+        await deleteFolderRecursive(curPath);
       } else {
-        fs.unlinkSync(curPath);
+        await fs.unlink(curPath);
       }
-    });
-    fs.rmdirSync(folderPath);
+    }));
+    await fs.rmdir(folderPath);
     log('fs', `Deleted folder: ${folderPath}`);
+  } catch (err) {
+    log('fs', `Error deleting folder: ${err.message}`, 'error');
   }
 }
 
-// Download and extract .sb3 files
 async function downloadAndExtractNewUploadsAdmZip() {
   try {
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    await fs.mkdir(UPLOAD_DIR, { recursive: true });
     downloadStatus = { success: false, error: null, extractedFiles: [], logs: [] };
 
     log('download', 'Requesting uploads.zip...');
@@ -180,29 +186,43 @@ async function downloadAndExtractNewUploadsAdmZip() {
     });
 
     const zipBuffer = Buffer.from(response.data);
-    const zipPath = path.join(UPLOAD_DIR, 'uploads.zip');
-    fs.writeFileSync(zipPath, zipBuffer);
-    log('download', 'Saved uploads.zip');
-
     const zip = new AdmZip(zipBuffer);
-    const sb3Entries = zip.getEntries();
+    const entries = zip.getEntries();
 
-    if (sb3Entries.length === 0) {
-      log('extract', 'No .sb3 files found in uploads.zip', 'error');
-      downloadStatus.error = 'No .sb3 files found in uploads.zip';
+    if (entries.length === 0) {
+      log('extract', 'No files found in uploads.zip', 'error');
+      downloadStatus.error = 'No files found in uploads.zip';
       return;
     }
 
-    for (const entry of sb3Entries) {
-      const outputPath = path.join(UPLOAD_DIR, path.basename(entry.entryName));
-      fs.writeFileSync(outputPath, entry.getData());
-      downloadStatus.extractedFiles.push(entry.entryName);
-      log('extract', `Extracted ${entry.entryName}`);
-    }
+    const extractedFileNames = [];
 
-    fs.unlinkSync(zipPath);
-    log('cleanup', 'Deleted uploads.zip after extraction.');
+    // Extract asynchronously in parallel
+    await Promise.all(entries.map(async entry => {
+      if (entry.isDirectory) return;
+      const filename = path.basename(entry.entryName);
+      const outputPath = path.join(UPLOAD_DIR, filename);
+      await fs.writeFile(outputPath, entry.getData());
+      extractedFileNames.push(filename);
+      log('extract', `Extracted ${filename}`);
+    }));
+
+    // Cleanup old files
+    const currentFiles = await fs.readdir(UPLOAD_DIR);
+    await Promise.all(currentFiles.map(async file => {
+      if (!extractedFileNames.includes(file)) {
+        const fullPath = path.join(UPLOAD_DIR, file);
+        const stat = await fs.lstat(fullPath);
+        if (stat.isFile()) {
+          await fs.unlink(fullPath);
+          log('cleanup', `Deleted old file: ${file}`);
+        }
+      }
+    }));
+
+    downloadStatus.extractedFiles = extractedFileNames;
     downloadStatus.success = true;
+    log('cleanup', 'Extraction and cleanup complete.');
   } catch (err) {
     downloadStatus.success = false;
     downloadStatus.error = err.message;
@@ -210,7 +230,6 @@ async function downloadAndExtractNewUploadsAdmZip() {
   }
 }
 
-// Status route
 router.get('/status', (req, res) => {
   res.json({
     uploadStatus,
@@ -218,31 +237,27 @@ router.get('/status', (req, res) => {
   });
 });
 
-// Serve uploads.zip if needed
-router.get('/download-uploads-zip', (req, res) => {
+router.get('/download-uploads-zip', async (req, res) => {
   const zipPath = path.join(UPLOAD_DIR, 'uploads.zip');
-  if (!fs.existsSync(zipPath)) {
-    return res.status(404).send('uploads.zip not found');
+  try {
+    await fs.access(zipPath);
+    res.download(zipPath, 'uploads.zip');
+  } catch {
+    res.status(404).send('uploads.zip not found');
   }
-  res.download(zipPath, 'uploads.zip', err => {
-    if (err) {
-      log('express', `Error sending uploads.zip: ${err.message}`, 'error');
-      res.status(500).send('Error sending uploads.zip');
-    }
-  });
 });
 
 async function startUploadLoop() {
-  while (true) {
-    await uploadSB3Files();
-    await new Promise(resolve => setTimeout(resolve, 10_000)); // 10 seconds delay
-  }
+  while (true) {
+    await uploadSB3Files();
+    // Very short delay to avoid event loop starvation, but practically minimal
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
 }
 
-// Start loop only after Express is initialized
 startUploadLoop().catch(err => {
-  console.error('Upload loop failed:', err);
-  log('Backup', err);
+  console.error('Upload loop failed:', err);
+  log('Backup', err.message);
 });
 
 module.exports = router;
