@@ -259,8 +259,8 @@ router.get('/images/:id', validateProjectId, (req, res) => {
     const data = JSON.parse(entry.getData().toString('utf-8'));
     const imageFilename = data.image;
     if (!imageFilename) return res.status(404).json({ error: 'Image not referenced in data.json' });
-
-    const imageEntry = zip.getEntry(imageFilename);
+    
+    const imageEntry = zip.getEntry(`${id}.png`);
     if (!imageEntry) return res.status(404).json({ error: 'Image not found in project file' });
 
     const ext = path.extname(imageFilename).substring(1);
