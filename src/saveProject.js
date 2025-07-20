@@ -3,38 +3,12 @@ const multer = require('multer');
 const AdmZip = require('adm-zip');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
-const puppeteer = require('puppeteer');
 
 const router = express.Router();
 const upload = multer({ dest: 'temp_uploads/' });
 
 const LOCAL_UPLOAD_PATH = path.join(__dirname, '..', 'local_storage/uploads');
 if (!fs.existsSync(LOCAL_UPLOAD_PATH)) fs.mkdirSync(LOCAL_UPLOAD_PATH, { recursive: true });
-
-// Puppeteer-based screenshot function
-async function screenshotWithBrowser(htmlPath, screenshotPath) {
-  const browser = await puppeteer.launch({ headless: 'new' });
-  const page = await browser.newPage();
-  // Load the HTML file
-  await page.goto(`file://${htmlPath}`, { waitUntil: 'networkidle0' });
-  // Wait for iframe to appear
-  await page.waitForSelector('iframe');
-  // Get the iframe element
-  const iframeElement = await page.$('iframe');
-  const iframe = await iframeElement.contentFrame();
-  // Wait for iframe's internal page to fully load
-  await iframe.waitForFunction(
-    () => document.readyState === 'complete',
-    { timeout: 15000 }
-  );
-  // Optionally wait a bit more for things like sprites or assets to finish rendering
-  await page.waitForTimeout(3000); // optional delay
-  // Screenshot the visible part of the page
-  await page.screenshot({ path: screenshotPath });
-  await browser.close();
-}
-
 
 // Serve raw .sb3 project
 router.get('/projectSb3/:id', (req, res) => {
@@ -49,15 +23,21 @@ router.get('/projectSb3/:id', (req, res) => {
   res.sendFile(projectPath);
 });
 
-// Save project and generate screenshot
-router.post('/:id/save', upload.single('project'), async (req, res) => {
+// Save project and update with uploaded thumbnail
+const multiUpload = upload.fields([
+  { name: 'project', maxCount: 1 },
+  { name: 'thumbnail', maxCount: 1 }
+]);
+
+router.post('/:id/save', multiUpload, async (req, res) => {
   const { id } = req.params;
-  const sb3Blob = req.file;
+  const sb3File = req.files?.project?.[0];
+  const thumbnailFile = req.files?.thumbnail?.[0];
   const { projectName } = req.body;
   const destPath = path.join(LOCAL_UPLOAD_PATH, `${id}.sb3`);
 
-  if (!sb3Blob) return res.status(400).json({ error: 'No project file provided' });
-  if (!fs.existsSync(destPath)) return res.status(404).json({ error: 'Project not found' });
+  if (!sb3File) return res.status(400).json({ error: 'No project file provided' });
+  if (!fs.existsSync(destPath)) return res.status(404).json({ error: 'Original project not found' });
 
   try {
     const existingZip = new AdmZip(destPath);
@@ -68,64 +48,46 @@ router.post('/:id/save', upload.single('project'), async (req, res) => {
     const dataJson = JSON.parse(dataEntry.getData().toString());
     const cJson = JSON.parse(comments.getData().toString());
 
+    // Update project title if provided
     if (typeof projectName === 'string') {
       dataJson.title = projectName;
     }
 
-    const uploadedZip = new AdmZip(sb3Blob.path);
+    const uploadedZip = new AdmZip(sb3File.path);
     const newZip = new AdmZip();
 
+    // Add metadata files
     newZip.addFile('data.json', Buffer.from(JSON.stringify(dataJson, null, 2)));
     newZip.addFile('comments.json', Buffer.from(JSON.stringify(cJson, null, 2)));
 
+    // Add only project.json and media assets (excluding old .png screenshots)
     uploadedZip.getEntries().forEach(entry => {
       const name = entry.entryName;
-      if (name === 'project.json' || /\.(png|svg|wav|mp3)$/.test(name)) {
+      const isAsset = /\.(png|svg|wav|mp3)$/.test(name);
+      const isScreenshot = /\.png$/.test(name);
+      const isProjectJson = name === 'project.json';
+
+      if (isProjectJson || (isAsset && !isScreenshot)) {
         newZip.addFile(name, entry.getData());
       }
     });
 
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scratch-'));
-    const tempHtmlPath = path.join(tempDir, 'index.html');
-    const screenshotPath = path.join(tempDir, `${id}.png`);
+    // Add the new thumbnail as {id}.png
+    if (thumbnailFile) {
+      const thumbnailBuffer = fs.readFileSync(thumbnailFile.path);
+      newZip.addFile(`${id}.png`, thumbnailBuffer);
+      fs.unlinkSync(thumbnailFile.path);
+    }
 
-    fs.writeFileSync(path.join(tempDir, `${id}.sb3`), newZip.toBuffer());
-
-    // Generate embed HTML
-    const turboWarpEmbedUrl = `https://myscratchblocks.ddns.net/scratch-gui/embed#${id}?admin=True`;
-    const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <title>TurboWarp Embed Screenshot</title>
-  <style>
-    body, html { margin:0; padding:0; overflow:hidden; background:#fff; }
-    iframe { border:none; width:480px; height:360px; }
-  </style>
-</head>
-<body>
-  <iframe src="${turboWarpEmbedUrl}" allowfullscreen></iframe>
-</body>
-</html>`;
-
-    fs.writeFileSync(tempHtmlPath, htmlContent);
-
-    // Take screenshot using Puppeteer
-    await screenshotWithBrowser(tempHtmlPath, screenshotPath);
-
-    const screenshotBuffer = fs.readFileSync(screenshotPath);
-    newZip.addFile(`${id}.png`, screenshotBuffer);
-
+    // Save new .sb3 file
     newZip.writeZip(destPath);
+    fs.unlinkSync(sb3File.path);
 
-    // Cleanup
-    fs.unlinkSync(sb3Blob.path);
-    fs.rmSync(tempDir, { recursive: true, force: true });
-
-    res.json({ message: 'Project updated with TurboWarp screenshot', id, updatedTitle: dataJson.title });
+    res.json({ message: 'Project saved with thumbnail', id, updatedTitle: dataJson.title });
   } catch (err) {
     console.error('Error saving project:', err);
-    if (sb3Blob && fs.existsSync(sb3Blob.path)) fs.unlinkSync(sb3Blob.path);
+    if (sb3File && fs.existsSync(sb3File.path)) fs.unlinkSync(sb3File.path);
+    if (thumbnailFile && fs.existsSync(thumbnailFile.path)) fs.unlinkSync(thumbnailFile.path);
     res.status(500).json({ error: 'Failed to save project', details: err.message });
   }
 });
