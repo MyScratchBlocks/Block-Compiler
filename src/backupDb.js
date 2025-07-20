@@ -246,8 +246,21 @@ router.get('/download-uploads-zip', async (req, res) => {
 
 async function startUploadLoop() {
   while (true) {
-    await uploadSB3Files();
-    await new Promise(resolve => setTimeout(resolve, 100)); // minimal delay
+    let files;
+    try {
+      files = await fs.readdir(UPLOAD_DIR);
+    } catch (err) {
+      files = [];
+    }
+
+    if (!files || files.length === 0) {
+      log('loop', 'No files found in UPLOAD_DIR, downloading from server...');
+      await downloadAndExtractNewUploadsAdmZip();
+    } else {
+      await uploadSB3Files();
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 60000)); // 5 seconds delay between loops
   }
 }
 
